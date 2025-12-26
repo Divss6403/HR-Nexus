@@ -48,7 +48,15 @@ class HRNexusAPITester:
                 response = requests.delete(url, headers=headers, timeout=10)
 
             success = response.status_code == expected_status
-            return success, response.json() if response.content else {}, response.status_code
+            
+            # Handle file downloads (non-JSON responses)
+            try:
+                response_data = response.json() if response.content else {}
+            except:
+                # If JSON parsing fails, it might be a file download
+                response_data = {"file_download": True, "content_type": response.headers.get('content-type', '')}
+            
+            return success, response_data, response.status_code
         except Exception as e:
             return False, {"error": str(e)}, 0
 
