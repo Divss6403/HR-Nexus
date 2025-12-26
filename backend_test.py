@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 
 class HRNexusAPITester:
-    def __init__(self, base_url="https://hr-dashboard-94.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://staffportal-29.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
         self.user_id = None
