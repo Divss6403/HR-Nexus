@@ -520,8 +520,8 @@ async def download_offer_letter(current_user: dict = Depends(get_current_user)):
     POSITION DETAILS:
     
     • Role: {current_user.get('role', 'Team Member').replace('_', ' ').title()}
-    • Department: {current_user.get('employee_fields', {}).get('department', 'To be assigned') if current_user.get('role') == 'employee' else current_user.get('intern_fields', {}).get('area_of_interest', 'To be assigned')}
-    • Start Date: {current_user.get('employee_fields', {}).get('joining_date', current_user.get('intern_fields', {}).get('internship_start', 'As discussed'))}
+    • Department: {(current_user.get('employee_fields') or {}).get('department', 'To be assigned') if current_user.get('role') == 'employee' else (current_user.get('intern_fields') or {}).get('area_of_interest', 'To be assigned')}
+    • Start Date: {(current_user.get('employee_fields') or {}).get('joining_date', (current_user.get('intern_fields') or {}).get('internship_start', 'As discussed'))}
     
     ───────────────────────────────────────────────────────────────
     
