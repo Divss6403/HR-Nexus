@@ -287,6 +287,205 @@ class HRNexusAPITester:
             # Restore original token
             self.token = original_token
 
+    def test_predefined_users_login(self):
+        """Test login with predefined test users"""
+        predefined_users = [
+            {"email": "hr@test.com", "password": "password123", "role": "hr_manager"},
+            {"email": "employee1@test.com", "password": "password123", "role": "employee"},
+            {"email": "intern1@test.com", "password": "password123", "role": "intern"}
+        ]
+        
+        self.predefined_tokens = {}
+        
+        for user in predefined_users:
+            login_data = {"email": user["email"], "password": user["password"]}
+            success, response, status = self.make_request('POST', 'auth/login', login_data, 200)
+            
+            if success and "access_token" in response:
+                self.predefined_tokens[user["role"]] = {
+                    "token": response["access_token"],
+                    "user": response["user"]
+                }
+                self.log_test(f"Predefined User Login - {user['role'].title()}", True)
+            else:
+                self.log_test(f"Predefined User Login - {user['role'].title()}", False, f"Status: {status}, Response: {response}")
+
+    def test_hr_onboarding_management_apis(self):
+        """Test HR Onboarding Management APIs"""
+        if "hr_manager" not in self.predefined_tokens:
+            self.log_test("HR Onboarding APIs", False, "HR Manager token not available")
+            return
+            
+        hr_token = self.predefined_tokens["hr_manager"]["token"]
+        original_token = self.token
+        self.token = hr_token
+        
+        # Test GET /api/onboarding/all-users (HR only)
+        success, response, status = self.make_request('GET', 'onboarding/all-users')
+        self.log_test("GET /api/onboarding/all-users", success and isinstance(response, list))
+        
+        # Get a user ID for further testing
+        user_id = None
+        if success and response:
+            for user in response:
+                if user.get("role") in ["intern", "employee"]:
+                    user_id = user.get("id")
+                    break
+        
+        if user_id:
+            # Test GET /api/onboarding/user/{user_id}
+            success, response, status = self.make_request('GET', f'onboarding/user/{user_id}')
+            self.log_test("GET /api/onboarding/user/{user_id}", success and "user" in response and "onboarding" in response)
+            
+            # Test PUT /api/onboarding/user/{user_id}/item/{item_id} - mark checklist item complete
+            if success and response.get("onboarding") and response["onboarding"].get("items"):
+                item_id = response["onboarding"]["items"][0].get("id")
+                if item_id:
+                    update_data = {"completed": True}
+                    success, response, status = self.make_request('PUT', f'onboarding/user/{user_id}/item/{item_id}', update_data)
+                    self.log_test("PUT /api/onboarding/user/{user_id}/item/{item_id}", success)
+            
+            # Test PUT /api/onboarding/user/{user_id}/complete-all
+            success, response, status = self.make_request('PUT', f'onboarding/user/{user_id}/complete-all', {})
+            self.log_test("PUT /api/onboarding/user/{user_id}/complete-all", success)
+        
+        self.token = original_token
+
+    def test_mentorship_assignment_apis(self):
+        """Test Mentorship Assignment APIs"""
+        if "hr_manager" not in self.predefined_tokens:
+            self.log_test("Mentorship APIs", False, "HR Manager token not available")
+            return
+            
+        hr_token = self.predefined_tokens["hr_manager"]["token"]
+        original_token = self.token
+        self.token = hr_token
+        
+        # Test GET /api/mentorship/assignments
+        success, response, status = self.make_request('GET', 'mentorship/assignments')
+        self.log_test("GET /api/mentorship/assignments", success and "employees" in response)
+        
+        # Test GET /api/mentorship/unassigned-interns
+        success, response, status = self.make_request('GET', 'mentorship/unassigned-interns')
+        self.log_test("GET /api/mentorship/unassigned-interns", success and isinstance(response, list))
+        
+        # Get employee and intern IDs for assignment test
+        employees_response = self.make_request('GET', 'users/employees')
+        interns_response = self.make_request('GET', 'mentorship/unassigned-interns')
+        
+        employee_id = None
+        intern_id = None
+        
+        if employees_response[0] and employees_response[1]:
+            employees = employees_response[1]
+            if employees:
+                employee_id = employees[0].get("id")
+        
+        if interns_response[0] and interns_response[1]:
+            interns = interns_response[1]
+            if interns:
+                intern_id = interns[0].get("id")
+        
+        if employee_id:
+            # Test PUT /api/mentorship/appoint-mentor/{employee_id}
+            success, response, status = self.make_request('PUT', f'mentorship/appoint-mentor/{employee_id}', {})
+            self.log_test("PUT /api/mentorship/appoint-mentor/{employee_id}", success)
+            
+            if intern_id:
+                # Test POST /api/mentorship/assign
+                assign_data = {"employee_id": employee_id, "intern_id": intern_id}
+                success, response, status = self.make_request('POST', 'mentorship/assign', assign_data)
+                self.log_test("POST /api/mentorship/assign", success)
+        
+        self.token = original_token
+
+    def test_document_apis(self):
+        """Test Document APIs"""
+        if "intern" not in self.predefined_tokens:
+            self.log_test("Document APIs", False, "Intern token not available")
+            return
+            
+        intern_token = self.predefined_tokens["intern"]["token"]
+        original_token = self.token
+        self.token = intern_token
+        
+        # Test POST /api/documents/upload
+        upload_data = {
+            "type": "resume",
+            "name": "test_resume.pdf",
+            "data": "data:application/pdf;base64,JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQovUmVzb3VyY2VzIDw8Ci9Gb250IDw8Ci9GMSA0IDAgUgo+Pgo+PgovQ29udGVudHMgNSAwIFIKPj4KZW5kb2JqCjQgMCBvYmoKPDwKL1R5cGUgL0ZvbnQKL1N1YnR5cGUgL1R5cGUxCi9CYXNlRm9udCAvSGVsdmV0aWNhCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9MZW5ndGggNDQKPj4Kc3RyZWFtCkJUCi9GMSA4IFRmCjEwIDcwIFRkCihUZXN0IFJlc3VtZSBEb2N1bWVudCkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago="
+        }
+        success, response, status = self.make_request('POST', 'documents/upload', upload_data)
+        self.log_test("POST /api/documents/upload", success)
+        
+        # Test GET /api/documents/my-documents
+        success, response, status = self.make_request('GET', 'documents/my-documents')
+        self.log_test("GET /api/documents/my-documents", success and isinstance(response, list))
+        
+        # Test GET /api/documents/offer-letter/download
+        success, response, status = self.make_request('GET', 'documents/offer-letter/download')
+        self.log_test("GET /api/documents/offer-letter/download", success or status == 200)
+        
+        self.token = original_token
+
+    def test_role_based_access_control(self):
+        """Test Role-Based Access Control"""
+        if "intern" not in self.predefined_tokens or "hr_manager" not in self.predefined_tokens:
+            self.log_test("RBAC Tests", False, "Required tokens not available")
+            return
+            
+        intern_token = self.predefined_tokens["intern"]["token"]
+        original_token = self.token
+        
+        # Test intern trying to access HR-only endpoints (should get 403)
+        self.token = intern_token
+        
+        # Intern should NOT be able to access HR onboarding management
+        success, response, status = self.make_request('GET', 'onboarding/all-users', expected_status=403)
+        self.log_test("RBAC: Intern blocked from HR onboarding endpoint", success or status == 403)
+        
+        # Intern should NOT be able to access HR dashboard stats
+        success, response, status = self.make_request('GET', 'dashboard/hr-stats', expected_status=403)
+        self.log_test("RBAC: Intern blocked from HR dashboard", success or status == 403)
+        
+        # Intern should NOT be able to modify onboarding checklist
+        success, response, status = self.make_request('PUT', 'onboarding/user/test-id/item/1', {"completed": True}, expected_status=403)
+        self.log_test("RBAC: Intern blocked from modifying onboarding", success or status == 403)
+        
+        self.token = original_token
+
+    def test_employee_mentorship_access(self):
+        """Test Employee access to mentorship features"""
+        if "employee" not in self.predefined_tokens:
+            self.log_test("Employee Mentorship Access", False, "Employee token not available")
+            return
+            
+        employee_token = self.predefined_tokens["employee"]["token"]
+        original_token = self.token
+        self.token = employee_token
+        
+        # Test GET /api/mentorship/assignments (employee should see their assigned interns)
+        success, response, status = self.make_request('GET', 'mentorship/assignments')
+        self.log_test("Employee: GET /api/mentorship/assignments", success and ("interns" in response or "is_mentor" in response))
+        
+        self.token = original_token
+
+    def test_intern_read_only_onboarding(self):
+        """Test Intern read-only access to onboarding"""
+        if "intern" not in self.predefined_tokens:
+            self.log_test("Intern Onboarding Access", False, "Intern token not available")
+            return
+            
+        intern_token = self.predefined_tokens["intern"]["token"]
+        original_token = self.token
+        self.token = intern_token
+        
+        # Test GET /api/onboarding/checklist (intern should be able to read their own)
+        success, response, status = self.make_request('GET', 'onboarding/checklist')
+        self.log_test("Intern: GET /api/onboarding/checklist", success)
+        
+        self.token = original_token
+
     def run_all_tests(self):
         """Run all test suites"""
         print("🚀 Starting HR Nexus Backend API Tests...")
