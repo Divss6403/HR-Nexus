@@ -81,7 +81,6 @@ const Signup = () => {
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
@@ -92,7 +91,6 @@ const Signup = () => {
       ...prev,
       [section]: { ...prev[section], [field]: value }
     }));
-    // Clear error
     if (errors[`${section}.${field}`]) {
       setErrors(prev => ({ ...prev, [`${section}.${field}`]: null }));
     }
@@ -101,7 +99,6 @@ const Signup = () => {
   const handleFileChange = (field, nameField, e) => {
     const file = e.target.files[0];
     if (file) {
-      // Convert to base64
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({
@@ -223,84 +220,6 @@ const Signup = () => {
     hr_manager: <UserCog className="w-8 h-8" />
   };
 
-  const FileUploadField = ({ label, field, nameField, accept, icon: Icon, fileRef, required = true }) => (
-    <div className="space-y-2">
-      <Label className="text-slate-700 font-medium flex items-center gap-1">
-        {label}
-        {required && <span className="text-rose-500">*</span>}
-      </Label>
-      <div 
-        onClick={() => fileRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 ${
-          errors[field] ? 'border-rose-300 bg-rose-50/30' : formData[field] ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
-        }`}
-      >
-        <input
-          type="file"
-          ref={fileRef}
-          accept={accept}
-          onChange={(e) => handleFileChange(field, nameField, e)}
-          className="hidden"
-          data-testid={`${field}-input`}
-        />
-        <div className="flex flex-col items-center gap-2">
-          {formData[field] ? (
-            <>
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                <Check className="w-5 h-5 text-emerald-600" />
-              </div>
-              <span className="text-sm text-emerald-600 font-medium truncate max-w-full">
-                {formData[nameField]}
-              </span>
-              <span className="text-xs text-slate-400">Click to change</span>
-            </>
-          ) : (
-            <>
-              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
-                <Icon className="w-5 h-5 text-slate-400" />
-              </div>
-              <span className="text-sm text-slate-500">Click to upload</span>
-              <span className="text-xs text-slate-400">{accept.replace(/\./g, '').toUpperCase()}</span>
-            </>
-          )}
-        </div>
-      </div>
-      {errors[field] && (
-        <p className="text-xs text-rose-500 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
-          {errors[field]}
-        </p>
-      )}
-    </div>
-  );
-
-  const InputWithError = ({ label, field, type = 'text', placeholder, icon: Icon, required = true, ...props }) => (
-    <div className="space-y-2">
-      <Label className="text-slate-700 font-medium flex items-center gap-1">
-        {label}
-        {required && <span className="text-rose-500">*</span>}
-      </Label>
-      <div className="relative">
-        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
-        <Input
-          type={type}
-          placeholder={placeholder}
-          className={`${Icon ? 'pl-10' : ''} ${errors[field] ? 'border-rose-300 focus:ring-rose-500' : ''}`}
-          value={formData[field] || ''}
-          onChange={(e) => handleChange(field, e.target.value)}
-          data-testid={`${field.replace('_', '-')}-input`}
-          {...props}
-        />
-      </div>
-      {errors[field] && (
-        <p className="text-xs text-rose-500 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
-          {errors[field]}
-        </p>
-      )}
-    </div>
-  );
-
   const renderStep = () => {
     switch (step) {
       case 1:
@@ -389,14 +308,55 @@ const Signup = () => {
             <p className="text-center text-sm text-slate-500 mb-4">Upload profile photo <span className="text-rose-500">*</span></p>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <InputWithError label={t('fullName')} field="full_name" icon={User} placeholder="John Doe" />
+              {/* Full Name */}
+              <div className="col-span-2 space-y-2">
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  {t('fullName')} <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="text"
+                    placeholder="John Doe"
+                    className={`pl-10 ${errors.full_name ? 'border-rose-300' : ''}`}
+                    value={formData.full_name}
+                    onChange={(e) => handleChange('full_name', e.target.value)}
+                    data-testid="full-name-input"
+                  />
+                </div>
+                {errors.full_name && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.full_name}
+                  </p>
+                )}
               </div>
               
-              <div className="col-span-2">
-                <InputWithError label={t('email')} field="email" type="email" icon={Mail} placeholder="name@company.com" />
+              {/* Email */}
+              <div className="col-span-2 space-y-2">
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  {t('email')} <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="email"
+                    placeholder="name@company.com"
+                    className={`pl-10 ${errors.email ? 'border-rose-300' : ''}`}
+                    value={formData.email}
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    data-testid="email-input"
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.email}
+                  </p>
+                )}
               </div>
 
+              {/* Password */}
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium flex items-center gap-1">
                   {t('password')} <span className="text-rose-500">*</span>
@@ -420,6 +380,7 @@ const Signup = () => {
                 )}
               </div>
 
+              {/* Confirm Password */}
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium flex items-center gap-1">
                   {t('confirmPassword')} <span className="text-rose-500">*</span>
@@ -450,10 +411,31 @@ const Signup = () => {
                 )}
               </div>
 
+              {/* Phone Number */}
               <div className="space-y-2">
-                <InputWithError label={t('phone')} field="phone" icon={Phone} placeholder="+91 9876543210" />
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  {t('phone')} <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="text"
+                    placeholder="+91 9876543210"
+                    className={`pl-10 ${errors.phone ? 'border-rose-300' : ''}`}
+                    value={formData.phone}
+                    onChange={(e) => handleChange('phone', e.target.value)}
+                    data-testid="phone-input"
+                  />
+                </div>
+                {errors.phone && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.phone}
+                  </p>
+                )}
               </div>
 
+              {/* Gender */}
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium flex items-center gap-1">
                   {t('gender')} <span className="text-rose-500">*</span>
@@ -476,10 +458,30 @@ const Signup = () => {
                 )}
               </div>
 
+              {/* Date of Birth */}
               <div className="space-y-2">
-                <InputWithError label={t('dateOfBirth')} field="date_of_birth" type="date" icon={Calendar} />
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  {t('dateOfBirth')} <span className="text-rose-500">*</span>
+                </Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    type="date"
+                    className={`pl-10 ${errors.date_of_birth ? 'border-rose-300' : ''}`}
+                    value={formData.date_of_birth}
+                    onChange={(e) => handleChange('date_of_birth', e.target.value)}
+                    data-testid="date-of-birth-input"
+                  />
+                </div>
+                {errors.date_of_birth && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.date_of_birth}
+                  </p>
+                )}
               </div>
 
+              {/* Preferred Language */}
               <div className="space-y-2">
                 <Label className="text-slate-700 font-medium">{t('preferredLanguage')}</Label>
                 <Select value={formData.preferred_language} onValueChange={(v) => handleChange('preferred_language', v)}>
@@ -493,6 +495,7 @@ const Signup = () => {
                 </Select>
               </div>
 
+              {/* Address */}
               <div className="col-span-2 space-y-2">
                 <Label className="text-slate-700 font-medium flex items-center gap-1">
                   {t('address')} <span className="text-rose-500">*</span>
@@ -515,24 +518,103 @@ const Signup = () => {
                 )}
               </div>
 
-              {/* Document Uploads */}
-              <FileUploadField
-                label="Resume/CV"
-                field="resume"
-                nameField="resume_name"
-                accept=".pdf,.doc,.docx"
-                icon={FileText}
-                fileRef={resumeRef}
-              />
+              {/* Resume Upload */}
+              <div className="space-y-2">
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  Resume/CV <span className="text-rose-500">*</span>
+                </Label>
+                <div 
+                  onClick={() => resumeRef.current?.click()}
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 ${
+                    errors.resume ? 'border-rose-300 bg-rose-50/30' : formData.resume ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={resumeRef}
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => handleFileChange('resume', 'resume_name', e)}
+                    className="hidden"
+                    data-testid="resume-input"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    {formData.resume ? (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <Check className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-sm text-emerald-600 font-medium truncate max-w-full">
+                          {formData.resume_name}
+                        </span>
+                        <span className="text-xs text-slate-400">Click to change</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <span className="text-sm text-slate-500">Click to upload</span>
+                        <span className="text-xs text-slate-400">PDF, DOC, DOCX</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {errors.resume && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.resume}
+                  </p>
+                )}
+              </div>
 
-              <FileUploadField
-                label="Government ID (PAN/Aadhaar)"
-                field="government_id_file"
-                nameField="government_id_name"
-                accept=".pdf,.jpg,.jpeg,.png"
-                icon={FileText}
-                fileRef={govIdRef}
-              />
+              {/* Government ID Upload */}
+              <div className="space-y-2">
+                <Label className="text-slate-700 font-medium flex items-center gap-1">
+                  Government ID (PAN/Aadhaar) <span className="text-rose-500">*</span>
+                </Label>
+                <div 
+                  onClick={() => govIdRef.current?.click()}
+                  className={`relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all hover:border-blue-400 hover:bg-blue-50/50 ${
+                    errors.government_id_file ? 'border-rose-300 bg-rose-50/30' : formData.government_id_file ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={govIdRef}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => handleFileChange('government_id_file', 'government_id_name', e)}
+                    className="hidden"
+                    data-testid="government-id-input"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    {formData.government_id_file ? (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <Check className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <span className="text-sm text-emerald-600 font-medium truncate max-w-full">
+                          {formData.government_id_name}
+                        </span>
+                        <span className="text-xs text-slate-400">Click to change</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <span className="text-sm text-slate-500">Click to upload</span>
+                        <span className="text-xs text-slate-400">PDF, JPG, PNG</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {errors.government_id_file && (
+                  <p className="text-xs text-rose-500 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {errors.government_id_file}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         );
