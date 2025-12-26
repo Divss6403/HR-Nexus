@@ -243,9 +243,11 @@ async def register(user_data: UserCreate):
     await db.onboarding.insert_one(onboarding.model_dump())
     
     token = create_token(user_id, user_data.email, user_data.role)
-    user_response = {k: v for k, v in user_dict.items() if k != "password"}
     
-    return TokenResponse(access_token=token, user=user_response)
+    # Get the created user from database without _id and password
+    created_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    
+    return TokenResponse(access_token=token, user=created_user)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: LoginRequest):
