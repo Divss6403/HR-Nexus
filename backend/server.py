@@ -389,12 +389,12 @@ async def register(user_data: UserCreate):
     # Create onboarding checklist for interns and employees (not HR)
     if user_data.role in ["intern", "employee"]:
         default_items = [
-            {"id": "1", "title": "Documents verified", "completed": False},
-            {"id": "2", "title": "Offer letter accepted", "completed": False},
+            {"id": "1", "title": "Documents uploaded", "completed": False},
+            {"id": "2", "title": "Offer letter acknowledged", "completed": False},
             {"id": "3", "title": "Bank details submitted", "completed": False},
-            {"id": "4", "title": "System access provided", "completed": False},
+            {"id": "4", "title": "System access granted", "completed": False},
             {"id": "5", "title": "Orientation completed", "completed": False},
-            {"id": "6", "title": "Manager assigned", "completed": False}
+            {"id": "6", "title": "Reporting manager assigned", "completed": False}
         ]
         onboarding = OnboardingChecklist(
             user_id=user_id,
