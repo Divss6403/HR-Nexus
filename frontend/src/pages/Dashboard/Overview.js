@@ -5,12 +5,14 @@ import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Progress } from '../../components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { toast } from 'sonner';
 import { 
   Clock, Calendar, Target, CheckCircle2, AlertCircle, 
   Megaphone, Users, TrendingUp, LogIn, LogOut as LogOutIcon,
-  ArrowRight, Timer
+  ArrowRight, Timer, User, Briefcase, UserCog, DollarSign
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const API_URL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -21,6 +23,7 @@ const DashboardOverview = () => {
   const [hrStats, setHrStats] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState(null);
+  const [teamData, setTeamData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
@@ -31,15 +34,17 @@ const DashboardOverview = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, announcementsRes, todayRes] = await Promise.all([
+      const [statsRes, announcementsRes, todayRes, teamRes] = await Promise.all([
         axios.get(`${API_URL}/dashboard/stats`),
         axios.get(`${API_URL}/announcements`),
-        axios.get(`${API_URL}/attendance/today`)
+        axios.get(`${API_URL}/attendance/today`),
+        axios.get(`${API_URL}/team/my-team`)
       ]);
       
       setStats(statsRes.data);
       setAnnouncements(announcementsRes.data.slice(0, 3));
       setTodayAttendance(todayRes.data);
+      setTeamData(teamRes.data);
 
       if (user?.role === 'hr_manager') {
         const hrRes = await axios.get(`${API_URL}/dashboard/hr-stats`);
@@ -151,9 +156,58 @@ const DashboardOverview = () => {
         </div>
       </div>
 
+      {/* Team Hierarchy Card - For Interns */}
+      {user?.role === 'intern' && teamData && (
+        <Card className="dashboard-card border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50/50 to-transparent">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold text-slate-900 font-['Manrope'] flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-600" />
+              Your Team
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Assigned Employee */}
+              <div className="flex items-center gap-4 p-4 bg-white rounded-lg border border-slate-200">
+                <Avatar className="w-12 h-12">
+                  <AvatarFallback className="bg-emerald-600 text-white">
+                    {teamData.assigned_employee?.full_name?.charAt(0) || 'E'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Reporting To</p>
+                  <p className="font-semibold text-slate-900">
+                    {teamData.assigned_employee?.full_name || 'Not Assigned'}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {teamData.assigned_employee?.employee_fields?.designation || 'Employee'}
+                  </p>
+                </div>
+              </div>
+
+              {/* HR Mentor */}
+              <div className="flex items-center gap-4 p-4 bg-white rounded-lg border border-slate-200">
+                <Avatar className="w-12 h-12">
+                  <AvatarFallback className="bg-purple-600 text-white">
+                    {teamData.hr_mentor?.full_name?.charAt(0) || 'H'}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">HR Mentor</p>
+                  <p className="font-semibold text-slate-900">
+                    {teamData.hr_mentor?.full_name || 'Not Assigned'}
+                  </p>
+                  <p className="text-sm text-slate-500">HR Manager</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* HR Stats (Only for HR Manager) */}
       {user?.role === 'hr_manager' && hrStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 animate-fade-in">
           <Card className="dashboard-card card-hover">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -209,7 +263,59 @@ const DashboardOverview = () => {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="dashboard-card card-hover">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="stats-icon-bg bg-rose-100">
+                  <DollarSign className="w-6 h-6 text-rose-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">{hrStats.pending_payroll || 0}</p>
+                  <p className="text-sm text-slate-500">Pending Payroll</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+      )}
+
+      {/* Employee Team Card */}
+      {user?.role === 'employee' && teamData && (
+        <Card className="dashboard-card border-l-4 border-l-emerald-500">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg font-semibold text-slate-900 font-['Manrope'] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-600" />
+                My Team
+              </div>
+              <span className="text-sm font-normal text-slate-500">
+                {teamData.intern_count || 0} / {15} interns
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {teamData.interns && teamData.interns.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {teamData.interns.slice(0, 8).map((intern) => (
+                  <div key={intern.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-blue-600 text-white text-xs">
+                        {intern.full_name?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{intern.full_name}</p>
+                      <p className="text-xs text-slate-500 truncate">{intern.intern_fields?.area_of_interest}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-500 text-center py-4">No interns assigned yet</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Stats Cards */}
@@ -330,36 +436,39 @@ const DashboardOverview = () => {
                 {t('recentAnnouncements')}
               </div>
             </CardTitle>
-            <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1">
-              {t('viewAll')}
-              <ArrowRight className="w-4 h-4" />
-            </Button>
+            <Link to="/dashboard/announcements">
+              <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 gap-1">
+                {t('viewAll')}
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             {announcements.length > 0 ? (
               <div className="space-y-3">
                 {announcements.map((announcement) => (
-                  <div 
+                  <Link 
                     key={announcement.id} 
-                    className="p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors"
+                    to={`/dashboard/announcements`}
+                    className="block p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-medium text-slate-900 text-sm">{announcement.title}</h4>
-                      <span className={`announcement-category ${
+                      <h4 className="font-medium text-slate-900 text-sm line-clamp-1">{announcement.title}</h4>
+                      <span className={`badge text-xs whitespace-nowrap ${
                         announcement.category === 'important' 
-                          ? 'announcement-category-important' 
+                          ? 'badge-error' 
                           : announcement.category === 'event'
-                          ? 'announcement-category-event'
-                          : 'announcement-category-general'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : 'badge-secondary'
                       }`}>
                         {announcement.category}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{announcement.content}</p>
+                    <p className="text-sm text-slate-500 mt-1 line-clamp-1">{announcement.content.substring(0, 80)}...</p>
                     <p className="text-xs text-slate-400 mt-2">
                       {new Date(announcement.created_at).toLocaleDateString()}
                     </p>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (
