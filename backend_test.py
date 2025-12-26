@@ -424,7 +424,8 @@ class HRNexusAPITester:
         
         # Test GET /api/documents/offer-letter/download
         success, response, status = self.make_request('GET', 'documents/offer-letter/download')
-        self.log_test("GET /api/documents/offer-letter/download", success or status == 200)
+        # For file downloads, we should check status code instead of response content
+        self.log_test("GET /api/documents/offer-letter/download", status == 200)
         
         self.token = original_token
 
