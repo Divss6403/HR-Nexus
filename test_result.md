@@ -101,3 +101,148 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Build HR Nexus - comprehensive HR management website with role-based features for HR Managers, Employees, and Interns. Key features: HR Manager onboarding management, mentorship assignments, document uploads, and offer letter downloads."
+
+backend:
+  - task: "HR Manager Onboarding Management API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented endpoints: GET /api/onboarding/all-users, GET /api/onboarding/user/{user_id}, PUT /api/onboarding/user/{user_id}/item/{item_id}, PUT /api/onboarding/user/{user_id}/complete-all"
+
+  - task: "Mentorship Assignment API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented endpoints: GET /api/mentorship/assignments, POST /api/mentorship/assign, PUT /api/mentorship/appoint-mentor/{employee_id}, GET /api/mentorship/unassigned-interns"
+
+  - task: "Document Upload API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented endpoints: POST /api/documents/upload, GET /api/documents/my-documents, GET /api/documents/{doc_type}"
+
+  - task: "Offer Letter Download API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/documents/offer-letter/download - returns text file with offer letter content"
+
+frontend:
+  - task: "HR Onboarding Management Page"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard/Recruitment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "HR Manager sees 'Intern & Employee Onboarding Management' view with user search, role filter, and checklist management. Can mark items complete/pending."
+
+  - task: "Intern/Employee Read-Only Onboarding View"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard/Recruitment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Non-HR users see read-only checklist with progress bar, pending/completed badges, note that only HR can update. Includes document upload buttons and offer letter download."
+
+  - task: "Mentorship & Appointment Management Page"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard/Mentorship.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New HR-only page showing mentors, assigned interns, stats cards. Can assign interns to employee mentors. Only visible in sidebar for HR role."
+
+  - task: "Document Upload Functionality"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard/Recruitment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Upload buttons for ID Proof, Resume/CV, Address Proof, College ID (interns). Re-upload capability for existing documents."
+
+  - task: "Offer Letter PDF Download"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Dashboard/Recruitment.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Download PDF button triggers API call and downloads offer letter file"
+
+  - task: "Sidebar Navigation Update"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/components/Layout/Sidebar.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added 'Mentorship & Appointments' link visible only for hr_manager role"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "HR Onboarding Management Page"
+    - "Mentorship & Appointment Management Page"
+    - "Document Upload Functionality"
+    - "Offer Letter PDF Download"
+    - "Intern/Employee Read-Only Onboarding View"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: "Implemented all HR management features. Need comprehensive testing: 1) Login as HR (hr@test.com/password123), test onboarding management and mentorship. 2) Login as Intern (intern1@test.com/password123), verify read-only view and document upload. 3) Test offer letter download for both roles."
