@@ -194,6 +194,16 @@ class OnboardingChecklist(BaseModel):
     total_items: int = 0
     status: str = "in_progress"
 
+class TeamAssignment(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    employee_id: str
+    employee_name: str
+    hr_mentor_id: str
+    hr_mentor_name: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: Optional[str] = None
+
 # ==================== AUTH HELPERS ====================
 
 def hash_password(password: str) -> str:
@@ -582,8 +592,10 @@ async def check_out(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/attendance/my-records")
 async def get_my_attendance(current_user: dict = Depends(get_current_user)):
+    # Get attendance from last 30 days for display
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     records = await db.attendance.find(
-        {"user_id": current_user["id"]}, {"_id": 0}
+        {"user_id": current_user["id"], "date": {"$gte": thirty_days_ago}}, {"_id": 0}
     ).sort("date", -1).to_list(100)
     return records
 
@@ -636,7 +648,12 @@ async def get_pending_leaves(current_user: dict = Depends(get_current_user)):
 async def get_all_leaves(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    leaves = await db.leaves.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Get leaves from last 20 days only for display
+    twenty_days_ago = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()
+    leaves = await db.leaves.find(
+        {"created_at": {"$gte": twenty_days_ago}}, 
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
     for leave in leaves:
         user = await db.users.find_one({"id": leave["user_id"]}, {"_id": 0, "password": 0})
         leave["user"] = user
