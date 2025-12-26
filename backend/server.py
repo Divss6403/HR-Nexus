@@ -1,10 +1,12 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, status
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import io
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Optional
@@ -86,13 +88,6 @@ class UserCreate(UserBase):
     intern_fields: Optional[InternFields] = None
     employee_fields: Optional[EmployeeFields] = None
     hr_manager_fields: Optional[HRManagerFields] = None
-
-class UserResponse(UserBase):
-    id: str
-    created_at: str
-    intern_fields: Optional[dict] = None
-    employee_fields: Optional[dict] = None
-    hr_manager_fields: Optional[dict] = None
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -193,14 +188,17 @@ class OnboardingChecklist(BaseModel):
     completed_items: int = 0
     total_items: int = 0
     status: str = "in_progress"
+    updated_by: Optional[str] = None
+    updated_at: Optional[str] = None
 
-class TeamAssignment(BaseModel):
+class MentorshipAssignment(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     employee_id: str
     employee_name: str
     hr_mentor_id: str
     hr_mentor_name: str
+    intern_ids: List[str] = []
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: Optional[str] = None
 
@@ -237,12 +235,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 async def assign_intern_to_employee_and_hr(intern_id: str):
     """Auto-assign intern to an employee (max 15 interns per employee) and HR mentor"""
-    # Find an employee with less than 15 interns
     employees = await db.users.find({"role": "employee"}, {"_id": 0}).to_list(1000)
     
     assigned_employee = None
     for emp in employees:
-        # Count interns assigned to this employee
         intern_count = await db.users.count_documents({
             "role": "intern",
             "assigned_employee_id": emp["id"]
@@ -251,10 +247,8 @@ async def assign_intern_to_employee_and_hr(intern_id: str):
             assigned_employee = emp
             break
     
-    # Find an HR manager to be mentor
     hr_manager = await db.users.find_one({"role": "hr_manager"}, {"_id": 0})
     
-    # Update the intern with assignments
     update_data = {}
     if assigned_employee:
         update_data["assigned_employee_id"] = assigned_employee["id"]
@@ -317,14 +311,6 @@ We're excited to share our Q4 2024 performance highlights with you!
 - Customer satisfaction score reached 94%
 - Employee retention rate at an all-time high of 96%
 
-**What's Next:**
-- Planning expansion into international markets
-- Launching new product lines in Q1 2025
-- Increasing team size by 40%
-
-**Recognition:**
-Special shoutout to our top performers this quarter! Your dedication and hard work have been instrumental in achieving these milestones.
-
 Keep up the amazing work, team!""",
                 "category": "important",
                 "author_name": "Leadership Team",
@@ -344,21 +330,10 @@ Keep up the amazing work, team!""",
 We're launching new learning and development programs to help you grow in your career.
 
 **Available Programs:**
-
-🎓 **Technical Certifications**
 - AWS Cloud Practitioner (Company Sponsored)
 - Google Analytics Certification
 - Agile/Scrum Master Certification
-
-💼 **Leadership Development**
-- First-time Manager Training
-- Executive Communication Skills
-- Strategic Thinking Workshop
-
-🌟 **Soft Skills**
-- Public Speaking Masterclass
-- Time Management Bootcamp
-- Emotional Intelligence Training
+- Leadership Development Training
 
 **How to Enroll:**
 1. Visit the Learning Portal in your dashboard
@@ -366,112 +341,18 @@ We're launching new learning and development programs to help you grow in your c
 3. Get manager approval
 4. Start learning!
 
-**Deadline:** Applications open until December 31st, 2024
-
 Invest in yourself - your growth is our priority!""",
                 "category": "event",
                 "author_name": "Learning & Development",
                 "author_role": "HR Manager",
                 "cover_image": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800",
-                "tags": ["learning", "development", "training", "opportunities"],
+                "tags": ["learning", "development", "training"],
                 "created_by": "system",
                 "created_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat(),
                 "is_active": True,
                 "views": 128
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "Annual Team Building Event - Save the Date!",
-                "content": """Mark your calendars! 🎉
-
-**HR Nexus Annual Team Building 2025**
-
-📅 **Date:** January 15-16, 2025
-📍 **Venue:** Riverside Resort & Spa
-⏰ **Time:** Full 2-day event
-
-**What to Expect:**
-
-**Day 1 - Adventure & Bonding**
-- Morning: Team building games & activities
-- Afternoon: Adventure sports (optional)
-- Evening: Cultural night & dinner
-
-**Day 2 - Recognition & Celebration**
-- Morning: Awards ceremony
-- Afternoon: Department showcases
-- Evening: Grand gala dinner & DJ night
-
-**Highlights:**
-- Best Team Awards
-- Star Performer Recognition
-- Fun games with exciting prizes
-- Professional photoshoot
-- Unlimited food & beverages
-
-**RSVP Required:** Please confirm your attendance by January 5th, 2025
-
-Transportation will be arranged from office. Families are welcome!
-
-Let's make memories together! 🌟""",
-                "category": "event",
-                "author_name": "Events Committee",
-                "author_role": "HR Manager",
-                "cover_image": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
-                "tags": ["team-building", "event", "celebration"],
-                "created_by": "system",
-                "created_at": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),
-                "is_active": True,
-                "views": 256
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "title": "New Internship Opportunities - Refer & Earn",
-                "content": """We're expanding our internship program!
-
-**Open Positions:**
-
-💻 **Software Development Intern**
-- Duration: 6 months
-- Stipend: Competitive
-- Skills: React, Node.js, Python
-
-📊 **Data Analytics Intern**
-- Duration: 3-6 months
-- Stipend: Competitive
-- Skills: SQL, Python, Tableau
-
-🎨 **UI/UX Design Intern**
-- Duration: 4 months
-- Stipend: Competitive
-- Skills: Figma, Adobe XD
-
-📱 **Digital Marketing Intern**
-- Duration: 3 months
-- Stipend: Competitive
-- Skills: Social Media, SEO, Content
-
-**Referral Bonus:**
-Refer a candidate who gets selected and earn:
-- ₹5,000 for intern referrals
-- ₹15,000 for full-time employee referrals
-
-**How to Refer:**
-Send candidate details to hr@hrnexus.com with subject "Referral - [Position Name]"
-
-Help us build an amazing team!""",
-                "category": "important",
-                "author_name": "Talent Acquisition",
-                "author_role": "HR Manager",
-                "cover_image": "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800",
-                "tags": ["internship", "opportunities", "referral", "hiring"],
-                "created_by": "system",
-                "created_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
-                "is_active": True,
-                "views": 189
             }
         ]
-        
         await db.announcements.insert_many(sample_announcements)
         logger.info("Sample announcements created")
 
@@ -489,12 +370,15 @@ async def register(user_data: UserCreate):
     user_dict["password"] = hash_password(user_data.password)
     user_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     user_dict["application_status"] = "selected"
+    user_dict["is_onboarded"] = user_data.role == "hr_manager"  # HR is auto-onboarded
     
     # Generate employee ID for employees
     if user_data.role == "employee" and user_data.employee_fields:
         if not user_data.employee_fields.employee_id:
             count = await db.users.count_documents({"role": "employee"})
             user_dict["employee_fields"]["employee_id"] = f"EMP{str(count + 1001).zfill(4)}"
+        user_dict["is_mentor"] = False
+        user_dict["mentoring_interns"] = []
     
     await db.users.insert_one(user_dict)
     
@@ -502,27 +386,26 @@ async def register(user_data: UserCreate):
     if user_data.role == "intern":
         await assign_intern_to_employee_and_hr(user_id)
     
-    # Create default onboarding checklist
-    default_items = [
-        {"id": "1", "title": "Submit ID Proof", "completed": False},
-        {"id": "2", "title": "Submit Resume/CV", "completed": False},
-        {"id": "3", "title": "Complete Profile", "completed": False},
-        {"id": "4", "title": "Read Company Policies", "completed": False},
-        {"id": "5", "title": "Setup Bank Details", "completed": False}
-    ]
-    onboarding = OnboardingChecklist(
-        user_id=user_id,
-        items=default_items,
-        total_items=len(default_items)
-    )
-    await db.onboarding.insert_one(onboarding.model_dump())
+    # Create onboarding checklist for interns and employees (not HR)
+    if user_data.role in ["intern", "employee"]:
+        default_items = [
+            {"id": "1", "title": "Documents verified", "completed": False},
+            {"id": "2", "title": "Offer letter accepted", "completed": False},
+            {"id": "3", "title": "Bank details submitted", "completed": False},
+            {"id": "4", "title": "System access provided", "completed": False},
+            {"id": "5", "title": "Orientation completed", "completed": False},
+            {"id": "6", "title": "Manager assigned", "completed": False}
+        ]
+        onboarding = OnboardingChecklist(
+            user_id=user_id,
+            items=default_items,
+            total_items=len(default_items)
+        )
+        await db.onboarding.insert_one(onboarding.model_dump())
     
-    # Create sample announcements if needed
     await create_sample_announcements()
     
     token = create_token(user_id, user_data.email, user_data.role)
-    
-    # Fetch updated user with assignments
     updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
     
     return TokenResponse(access_token=token, user=updated_user)
@@ -536,7 +419,6 @@ async def login(credentials: LoginRequest):
     token = create_token(user["id"], user["email"], user["role"])
     user_response = {k: v for k, v in user.items() if k != "password"}
     
-    # Create sample announcements if needed
     await create_sample_announcements()
     
     return TokenResponse(access_token=token, user=user_response)
@@ -554,6 +436,117 @@ async def update_profile(updates: dict, current_user: dict = Depends(get_current
     await db.users.update_one({"id": current_user["id"]}, {"$set": updates})
     updated_user = await db.users.find_one({"id": current_user["id"]}, {"_id": 0, "password": 0})
     return updated_user
+
+# ==================== DOCUMENT ROUTES ====================
+
+@api_router.post("/documents/upload")
+async def upload_document(data: dict, current_user: dict = Depends(get_current_user)):
+    """Upload a document (base64 encoded)"""
+    doc_type = data.get("type")  # resume, id_proof, address_proof, etc.
+    doc_data = data.get("data")  # base64 data
+    doc_name = data.get("name")
+    
+    if not doc_type or not doc_data:
+        raise HTTPException(status_code=400, detail="Document type and data required")
+    
+    # Store document reference
+    doc_record = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user["id"],
+        "type": doc_type,
+        "name": doc_name,
+        "data": doc_data,
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Check if document of this type exists, update or insert
+    existing = await db.documents.find_one({"user_id": current_user["id"], "type": doc_type})
+    if existing:
+        await db.documents.update_one(
+            {"user_id": current_user["id"], "type": doc_type},
+            {"$set": doc_record}
+        )
+    else:
+        await db.documents.insert_one(doc_record)
+    
+    return {"message": "Document uploaded successfully", "type": doc_type}
+
+@api_router.get("/documents/my-documents")
+async def get_my_documents(current_user: dict = Depends(get_current_user)):
+    """Get all documents for current user"""
+    docs = await db.documents.find(
+        {"user_id": current_user["id"]}, 
+        {"_id": 0, "data": 0}  # Don't return data in list
+    ).to_list(20)
+    return docs
+
+@api_router.get("/documents/{doc_type}")
+async def get_document(doc_type: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific document"""
+    doc = await db.documents.find_one(
+        {"user_id": current_user["id"], "type": doc_type},
+        {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+@api_router.get("/documents/offer-letter/download")
+async def download_offer_letter(current_user: dict = Depends(get_current_user)):
+    """Generate and download offer letter PDF"""
+    # Create a simple text-based PDF content
+    pdf_content = f"""
+    ═══════════════════════════════════════════════════════════════
+    
+                            HR NEXUS
+                    OFFICIAL OFFER LETTER
+    
+    ═══════════════════════════════════════════════════════════════
+    
+    Date: {datetime.now().strftime("%B %d, %Y")}
+    
+    Dear {current_user.get('full_name', 'Valued Team Member')},
+    
+    ───────────────────────────────────────────────────────────────
+    
+    THANK YOU FOR JOINING US!
+    
+    We are delighted to welcome you to the HR Nexus family. Your 
+    skills, experience, and enthusiasm will be valuable assets to 
+    our organization.
+    
+    ───────────────────────────────────────────────────────────────
+    
+    POSITION DETAILS:
+    
+    • Role: {current_user.get('role', 'Team Member').replace('_', ' ').title()}
+    • Department: {current_user.get('employee_fields', {}).get('department', 'To be assigned') if current_user.get('role') == 'employee' else current_user.get('intern_fields', {}).get('area_of_interest', 'To be assigned')}
+    • Start Date: {current_user.get('employee_fields', {}).get('joining_date', current_user.get('intern_fields', {}).get('internship_start', 'As discussed'))}
+    
+    ───────────────────────────────────────────────────────────────
+    
+    We look forward to your contributions and wish you a successful
+    journey with us.
+    
+    Best Regards,
+    
+    HR Team
+    HR Nexus
+    
+    ═══════════════════════════════════════════════════════════════
+    
+    This is a computer-generated document.
+    For queries, contact: hr@hrnexus.com
+    
+    ═══════════════════════════════════════════════════════════════
+    """
+    
+    # Return as downloadable text file (simulating PDF)
+    return StreamingResponse(
+        io.BytesIO(pdf_content.encode('utf-8')),
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=offer_letter_{current_user['id'][:8]}.txt"}
+    )
 
 # ==================== ATTENDANCE ROUTES ====================
 
@@ -592,7 +585,6 @@ async def check_out(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/attendance/my-records")
 async def get_my_attendance(current_user: dict = Depends(get_current_user)):
-    # Get attendance from last 30 days for display
     thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     records = await db.attendance.find(
         {"user_id": current_user["id"], "date": {"$gte": thirty_days_ago}}, {"_id": 0}
@@ -611,7 +603,10 @@ async def get_today_attendance(current_user: dict = Depends(get_current_user)):
 async def get_all_attendance(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    records = await db.attendance.find({}, {"_id": 0}).sort("date", -1).to_list(1000)
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+    records = await db.attendance.find(
+        {"date": {"$gte": thirty_days_ago}}, {"_id": 0}
+    ).sort("date", -1).to_list(1000)
     return records
 
 # ==================== LEAVE ROUTES ====================
@@ -638,7 +633,6 @@ async def get_pending_leaves(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
     leaves = await db.leaves.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    # Enrich with user data
     for leave in leaves:
         user = await db.users.find_one({"id": leave["user_id"]}, {"_id": 0, "password": 0})
         leave["user"] = user
@@ -648,7 +642,6 @@ async def get_pending_leaves(current_user: dict = Depends(get_current_user)):
 async def get_all_leaves(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    # Get leaves from last 20 days only for display
     twenty_days_ago = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()
     leaves = await db.leaves.find(
         {"created_at": {"$gte": twenty_days_ago}}, 
@@ -692,6 +685,232 @@ async def reject_leave(leave_id: str, data: dict = None, current_user: dict = De
         raise HTTPException(status_code=404, detail="Leave request not found")
     return {"message": "Leave rejected"}
 
+# ==================== ONBOARDING ROUTES (HR MANAGED) ====================
+
+@api_router.get("/onboarding/checklist")
+async def get_onboarding(current_user: dict = Depends(get_current_user)):
+    """Get own onboarding checklist (read-only for interns/employees)"""
+    if current_user["role"] == "hr_manager":
+        return {"items": [], "completed_items": 0, "total_items": 0, "status": "completed", "is_hr": True}
+    
+    checklist = await db.onboarding.find_one({"user_id": current_user["id"]}, {"_id": 0})
+    return checklist or {"items": [], "completed_items": 0, "total_items": 0}
+
+@api_router.get("/onboarding/all-users")
+async def get_all_onboarding(current_user: dict = Depends(get_current_user)):
+    """HR Manager: Get all users with onboarding status"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    users = await db.users.find(
+        {"role": {"$in": ["intern", "employee"]}}, 
+        {"_id": 0, "password": 0}
+    ).to_list(500)
+    
+    for user in users:
+        checklist = await db.onboarding.find_one({"user_id": user["id"]}, {"_id": 0})
+        user["onboarding"] = checklist
+    
+    return users
+
+@api_router.get("/onboarding/user/{user_id}")
+async def get_user_onboarding(user_id: str, current_user: dict = Depends(get_current_user)):
+    """HR Manager: Get specific user's onboarding checklist"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    checklist = await db.onboarding.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user, "onboarding": checklist}
+
+@api_router.put("/onboarding/user/{user_id}/item/{item_id}")
+async def update_onboarding_item(user_id: str, item_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    """HR Manager: Update onboarding checklist item"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    checklist = await db.onboarding.find_one({"user_id": user_id})
+    if not checklist:
+        raise HTTPException(status_code=404, detail="Checklist not found")
+    
+    items = checklist.get("items", [])
+    completed = 0
+    for item in items:
+        if item["id"] == item_id:
+            item["completed"] = data.get("completed", False)
+        if item.get("completed"):
+            completed += 1
+    
+    status = "completed" if completed == len(items) else "in_progress"
+    
+    await db.onboarding.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "items": items, 
+            "completed_items": completed, 
+            "status": status,
+            "updated_by": current_user["id"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Update user's onboarded status
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"is_onboarded": status == "completed"}}
+    )
+    
+    return {"message": "Checklist updated", "completed_items": completed, "status": status}
+
+@api_router.put("/onboarding/user/{user_id}/complete-all")
+async def complete_all_onboarding(user_id: str, current_user: dict = Depends(get_current_user)):
+    """HR Manager: Mark all onboarding items as complete"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    checklist = await db.onboarding.find_one({"user_id": user_id})
+    if not checklist:
+        raise HTTPException(status_code=404, detail="Checklist not found")
+    
+    items = checklist.get("items", [])
+    for item in items:
+        item["completed"] = True
+    
+    await db.onboarding.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "items": items, 
+            "completed_items": len(items), 
+            "status": "completed",
+            "updated_by": current_user["id"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    await db.users.update_one({"id": user_id}, {"$set": {"is_onboarded": True}})
+    
+    return {"message": "User fully onboarded"}
+
+# ==================== MENTORSHIP ROUTES ====================
+
+@api_router.get("/mentorship/assignments")
+async def get_mentorship_assignments(current_user: dict = Depends(get_current_user)):
+    """Get mentorship assignments"""
+    if current_user["role"] == "hr_manager":
+        # HR sees all assignments
+        employees = await db.users.find({"role": "employee"}, {"_id": 0, "password": 0}).to_list(100)
+        for emp in employees:
+            interns = await db.users.find(
+                {"role": "intern", "assigned_employee_id": emp["id"]},
+                {"_id": 0, "password": 0}
+            ).to_list(20)
+            emp["assigned_interns"] = interns
+            emp["intern_count"] = len(interns)
+        return {"employees": employees}
+    
+    elif current_user["role"] == "employee":
+        # Employee sees their assigned interns
+        interns = await db.users.find(
+            {"role": "intern", "assigned_employee_id": current_user["id"]},
+            {"_id": 0, "password": 0}
+        ).to_list(20)
+        return {"is_mentor": current_user.get("is_mentor", False), "interns": interns}
+    
+    elif current_user["role"] == "intern":
+        # Intern sees their mentor and HR
+        result = {"assigned_employee": None, "hr_mentor": None}
+        if current_user.get("assigned_employee_id"):
+            emp = await db.users.find_one({"id": current_user["assigned_employee_id"]}, {"_id": 0, "password": 0})
+            result["assigned_employee"] = emp
+        if current_user.get("assigned_hr_mentor_id"):
+            hr = await db.users.find_one({"id": current_user["assigned_hr_mentor_id"]}, {"_id": 0, "password": 0})
+            result["hr_mentor"] = hr
+        return result
+    
+    return {}
+
+@api_router.post("/mentorship/assign")
+async def assign_mentorship(data: dict, current_user: dict = Depends(get_current_user)):
+    """HR Manager: Assign intern to employee"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    intern_id = data.get("intern_id")
+    employee_id = data.get("employee_id")
+    
+    if not intern_id or not employee_id:
+        raise HTTPException(status_code=400, detail="Intern ID and Employee ID required")
+    
+    # Verify intern exists
+    intern = await db.users.find_one({"id": intern_id, "role": "intern"})
+    if not intern:
+        raise HTTPException(status_code=404, detail="Intern not found")
+    
+    # Verify employee exists
+    employee = await db.users.find_one({"id": employee_id, "role": "employee"})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Check employee's intern count
+    current_count = await db.users.count_documents({
+        "role": "intern",
+        "assigned_employee_id": employee_id
+    })
+    if current_count >= MAX_INTERNS_PER_EMPLOYEE:
+        raise HTTPException(status_code=400, detail=f"Employee already has {MAX_INTERNS_PER_EMPLOYEE} interns")
+    
+    # Update intern assignment
+    await db.users.update_one(
+        {"id": intern_id},
+        {"$set": {
+            "assigned_employee_id": employee_id,
+            "assigned_employee_name": employee["full_name"],
+            "assigned_hr_mentor_id": current_user["id"],
+            "assigned_hr_mentor_name": current_user["full_name"]
+        }}
+    )
+    
+    # Mark employee as mentor
+    await db.users.update_one(
+        {"id": employee_id},
+        {"$set": {"is_mentor": True}}
+    )
+    
+    return {"message": "Intern assigned to employee successfully"}
+
+@api_router.put("/mentorship/appoint-mentor/{employee_id}")
+async def appoint_mentor(employee_id: str, current_user: dict = Depends(get_current_user)):
+    """HR Manager: Appoint an employee as mentor"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    employee = await db.users.find_one({"id": employee_id, "role": "employee"})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    await db.users.update_one(
+        {"id": employee_id},
+        {"$set": {"is_mentor": True}}
+    )
+    
+    return {"message": f"{employee['full_name']} appointed as mentor"}
+
+@api_router.get("/mentorship/unassigned-interns")
+async def get_unassigned_interns(current_user: dict = Depends(get_current_user)):
+    """HR Manager: Get interns not assigned to any employee"""
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    interns = await db.users.find(
+        {"role": "intern", "$or": [{"assigned_employee_id": None}, {"assigned_employee_id": {"$exists": False}}]},
+        {"_id": 0, "password": 0}
+    ).to_list(100)
+    
+    return interns
+
 # ==================== ANNOUNCEMENT ROUTES ====================
 
 @api_router.post("/announcements")
@@ -724,27 +943,8 @@ async def get_announcement(announcement_id: str, current_user: dict = Depends(ge
     announcement = await db.announcements.find_one({"id": announcement_id}, {"_id": 0})
     if not announcement:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    # Increment views
     await db.announcements.update_one({"id": announcement_id}, {"$inc": {"views": 1}})
     return announcement
-
-@api_router.put("/announcements/{announcement_id}")
-async def update_announcement(announcement_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "hr_manager":
-        raise HTTPException(status_code=403, detail="HR Manager access required")
-    
-    update_data = {
-        "title": data.get("title"),
-        "content": data.get("content"),
-        "category": data.get("category"),
-        "cover_image": data.get("cover_image"),
-        "tags": data.get("tags"),
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    update_data = {k: v for k, v in update_data.items() if v is not None}
-    
-    await db.announcements.update_one({"id": announcement_id}, {"$set": update_data})
-    return {"message": "Announcement updated"}
 
 @api_router.delete("/announcements/{announcement_id}")
 async def delete_announcement(announcement_id: str, current_user: dict = Depends(get_current_user)):
@@ -775,13 +975,6 @@ async def get_my_goals(current_user: dict = Depends(get_current_user)):
 async def update_goal(goal_id: str, updates: dict, current_user: dict = Depends(get_current_user)):
     await db.goals.update_one({"id": goal_id}, {"$set": updates})
     return {"message": "Goal updated"}
-
-@api_router.get("/performance/all-goals")
-async def get_all_goals(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "hr_manager":
-        raise HTTPException(status_code=403, detail="HR Manager access required")
-    goals = await db.goals.find({}, {"_id": 0}).to_list(500)
-    return goals
 
 # ==================== TASK ROUTES ====================
 
@@ -827,7 +1020,6 @@ async def create_payroll(data: dict, current_user: dict = Depends(get_current_us
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
     
-    # Get user info
     user = await db.users.find_one({"id": data["user_id"]}, {"_id": 0, "password": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -868,7 +1060,6 @@ async def update_payroll(record_id: str, data: dict, current_user: dict = Depend
     if "notes" in data:
         update_data["notes"] = data["notes"]
     
-    # Recalculate net amount
     record = await db.payroll.find_one({"id": record_id}, {"_id": 0})
     if record:
         base = update_data.get("base_amount", record.get("base_amount", 0))
@@ -890,35 +1081,7 @@ async def mark_paid(record_id: str, current_user: dict = Depends(get_current_use
     )
     return {"message": "Payment marked as paid"}
 
-# ==================== ONBOARDING ROUTES ====================
-
-@api_router.get("/onboarding/checklist")
-async def get_onboarding(current_user: dict = Depends(get_current_user)):
-    checklist = await db.onboarding.find_one({"user_id": current_user["id"]}, {"_id": 0})
-    return checklist or {"items": [], "completed_items": 0, "total_items": 0}
-
-@api_router.put("/onboarding/checklist/{item_id}")
-async def update_checklist_item(item_id: str, current_user: dict = Depends(get_current_user)):
-    checklist = await db.onboarding.find_one({"user_id": current_user["id"]})
-    if not checklist:
-        raise HTTPException(status_code=404, detail="Checklist not found")
-    
-    items = checklist.get("items", [])
-    completed = 0
-    for item in items:
-        if item["id"] == item_id:
-            item["completed"] = not item.get("completed", False)
-        if item.get("completed"):
-            completed += 1
-    
-    status = "completed" if completed == len(items) else "in_progress"
-    await db.onboarding.update_one(
-        {"user_id": current_user["id"]},
-        {"$set": {"items": items, "completed_items": completed, "status": status}}
-    )
-    return {"message": "Checklist updated"}
-
-# ==================== USER MANAGEMENT (HR) ====================
+# ==================== USER MANAGEMENT ====================
 
 @api_router.get("/users")
 async def get_all_users(current_user: dict = Depends(get_current_user)):
@@ -929,13 +1092,11 @@ async def get_all_users(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/users/interns")
 async def get_interns(current_user: dict = Depends(get_current_user)):
-    """Get all interns - for employee and HR manager"""
     if current_user["role"] == "intern":
         raise HTTPException(status_code=403, detail="Access denied")
     
     query = {"role": "intern"}
     if current_user["role"] == "employee":
-        # Employee sees only their assigned interns
         query["assigned_employee_id"] = current_user["id"]
     
     interns = await db.users.find(query, {"_id": 0, "password": 0}).to_list(100)
@@ -955,24 +1116,12 @@ async def get_user(user_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@api_router.put("/users/{user_id}/status")
-async def update_user_status(user_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "hr_manager":
-        raise HTTPException(status_code=403, detail="HR Manager access required")
-    await db.users.update_one({"id": user_id}, {"$set": {"application_status": data.get("status")}})
-    return {"message": "Status updated"}
-
 # ==================== TEAM HIERARCHY ====================
 
 @api_router.get("/team/my-team")
 async def get_my_team(current_user: dict = Depends(get_current_user)):
-    """Get team members based on role"""
     if current_user["role"] == "intern":
-        # Intern sees their assigned employee and HR mentor
-        result = {
-            "assigned_employee": None,
-            "hr_mentor": None
-        }
+        result = {"assigned_employee": None, "hr_mentor": None}
         if current_user.get("assigned_employee_id"):
             emp = await db.users.find_one({"id": current_user["assigned_employee_id"]}, {"_id": 0, "password": 0})
             result["assigned_employee"] = emp
@@ -982,21 +1131,18 @@ async def get_my_team(current_user: dict = Depends(get_current_user)):
         return result
     
     elif current_user["role"] == "employee":
-        # Employee sees their interns
         interns = await db.users.find(
             {"role": "intern", "assigned_employee_id": current_user["id"]}, 
             {"_id": 0, "password": 0}
         ).to_list(20)
-        return {"interns": interns, "intern_count": len(interns)}
+        return {"is_mentor": current_user.get("is_mentor", False), "interns": interns, "intern_count": len(interns)}
     
     elif current_user["role"] == "hr_manager":
-        # HR sees all team members under mentorship
         mentees = await db.users.find(
             {"assigned_hr_mentor_id": current_user["id"]}, 
             {"_id": 0, "password": 0}
         ).to_list(100)
         
-        # Get employees with their intern counts
         employees = await db.users.find({"role": "employee"}, {"_id": 0, "password": 0}).to_list(100)
         for emp in employees:
             emp["intern_count"] = await db.users.count_documents({
@@ -1019,9 +1165,10 @@ async def get_my_team(current_user: dict = Depends(get_current_user)):
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     
-    total_attendance = await db.attendance.count_documents({"user_id": user_id})
-    present_days = await db.attendance.count_documents({"user_id": user_id, "status": "present"})
+    total_attendance = await db.attendance.count_documents({"user_id": user_id, "date": {"$gte": thirty_days_ago}})
+    present_days = await db.attendance.count_documents({"user_id": user_id, "status": "present", "date": {"$gte": thirty_days_ago}})
     pending_tasks = await db.tasks.count_documents({"user_id": user_id, "status": {"$ne": "completed"}})
     approved_leaves = await db.leaves.count_documents({"user_id": user_id, "status": "approved"})
     pending_leaves = await db.leaves.count_documents({"user_id": user_id, "status": "pending"})
@@ -1059,6 +1206,7 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     present_today = await db.attendance.count_documents({"date": today, "check_in": {"$ne": None}})
     pending_payroll = await db.payroll.count_documents({"status": "pending"})
+    pending_onboarding = await db.users.count_documents({"role": {"$in": ["intern", "employee"]}, "is_onboarded": {"$ne": True}})
     
     return {
         "total_employees": total_employees,
@@ -1067,7 +1215,8 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
         "pending_leaves": pending_leaves,
         "present_today": present_today,
         "total_staff": total_employees + total_interns + total_hr,
-        "pending_payroll": pending_payroll
+        "pending_payroll": pending_payroll,
+        "pending_onboarding": pending_onboarding
     }
 
 # Root endpoint
