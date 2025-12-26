@@ -28,15 +28,6 @@ const Mentorship = () => {
   const [selectedIntern, setSelectedIntern] = useState('');
   const [assigning, setAssigning] = useState(false);
 
-  // Redirect non-HR users
-  if (user?.role !== 'hr_manager') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       const [empRes, assignRes, unassignedRes] = await Promise.all([
@@ -59,6 +50,19 @@ const Mentorship = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user?.role === 'hr_manager') {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
+  }, [user?.role]);
+
+  // Redirect non-HR users
+  if (!loading && user?.role !== 'hr_manager') {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleAssignMentor = async () => {
     if (!selectedEmployee || !selectedIntern) {
