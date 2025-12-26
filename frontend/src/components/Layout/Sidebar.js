@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from '../../utils/translations';
 import { 
   LayoutDashboard, UserCircle, Users, Clock, Calendar, 
-  Target, DollarSign, Megaphone, LogOut, Building2, X, Settings
+  Target, DollarSign, Megaphone, LogOut, Building2, X, Settings, Shield
 } from 'lucide-react';
 import { ScrollArea } from '../../components/ui/scroll-area';
 
@@ -60,6 +60,12 @@ const Sidebar = ({ isOpen, onClose }) => {
       label: t('announcements'), 
       path: '/dashboard/announcements',
       roles: ['intern', 'employee', 'hr_manager']
+    },
+    { 
+      icon: Shield, 
+      label: 'Mentorship & Appointments', 
+      path: '/dashboard/mentorship',
+      roles: ['hr_manager']
     },
   ];
 
