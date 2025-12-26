@@ -7,7 +7,8 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
-import { Calendar } from '../../components/ui/calendar';
+import { Avatar, AvatarFallback } from '../../components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -35,7 +36,7 @@ import {
 import { toast } from 'sonner';
 import { 
   Clock, LogIn, LogOut as LogOutIcon, Calendar as CalendarIcon, 
-  CheckCircle2, XCircle, Timer, Plus, FileText
+  CheckCircle2, XCircle, Timer, Plus, FileText, Users, Check, X
 } from 'lucide-react';
 
 const API_URL = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -46,11 +47,15 @@ const Attendance = () => {
   const [records, setRecords] = useState([]);
   const [todayRecord, setTodayRecord] = useState(null);
   const [leaveRequests, setLeaveRequests] = useState([]);
+  const [pendingLeaves, setPendingLeaves] = useState([]);
+  const [allLeaves, setAllLeaves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [newLeave, setNewLeave] = useState({
     start_date: '',
     end_date: '',
@@ -72,6 +77,15 @@ const Attendance = () => {
       setRecords(recordsRes.data);
       setTodayRecord(todayRes.data);
       setLeaveRequests(leavesRes.data);
+
+      if (user?.role === 'hr_manager') {
+        const [pendingRes, allRes] = await Promise.all([
+          axios.get(`${API_URL}/leave/pending`),
+          axios.get(`${API_URL}/leave/all`)
+        ]);
+        setPendingLeaves(pendingRes.data);
+        setAllLeaves(allRes.data);
+      }
     } catch (error) {
       console.error('Error fetching attendance data:', error);
     } finally {
@@ -117,6 +131,30 @@ const Attendance = () => {
     }
   };
 
+  const handleApproveLeave = async (leaveId) => {
+    try {
+      await axios.put(`${API_URL}/leave/${leaveId}/approve`);
+      toast.success('Leave approved successfully');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to approve leave');
+    }
+  };
+
+  const handleRejectLeave = async () => {
+    if (!selectedLeave) return;
+    try {
+      await axios.put(`${API_URL}/leave/${selectedLeave.id}/reject`, { reason: rejectReason });
+      toast.success('Leave rejected');
+      setRejectDialogOpen(false);
+      setSelectedLeave(null);
+      setRejectReason('');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to reject leave');
+    }
+  };
+
   const formatTime = (isoString) => {
     if (!isoString) return '--:--';
     return new Date(isoString).toLocaleTimeString('en-US', { 
@@ -155,7 +193,10 @@ const Attendance = () => {
             {t('attendance')}
           </h2>
           <p className="text-slate-500 mt-1">
-            Track your daily attendance and manage leave requests
+            {user?.role === 'hr_manager' 
+              ? 'Manage attendance and approve leave requests'
+              : 'Track your daily attendance and manage leave requests'
+            }
           </p>
         </div>
         <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
@@ -169,7 +210,7 @@ const Attendance = () => {
             <DialogHeader>
               <DialogTitle>Apply for Leave</DialogTitle>
               <DialogDescription>
-                Submit your leave request for approval
+                Submit your leave request for HR approval
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -245,7 +286,6 @@ const Attendance = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Check In/Out Buttons */}
             <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-xl">
               <p className="text-sm text-slate-500 mb-4">
                 {new Date().toLocaleDateString('en-US', { 
@@ -280,7 +320,6 @@ const Attendance = () => {
               )}
             </div>
 
-            {/* Check In Time */}
             <div className="flex flex-col items-center justify-center p-6 bg-emerald-50 rounded-xl">
               <LogIn className="w-8 h-8 text-emerald-600 mb-2" />
               <p className="text-sm text-emerald-600 mb-1">Check In</p>
@@ -289,7 +328,6 @@ const Attendance = () => {
               </p>
             </div>
 
-            {/* Check Out Time */}
             <div className="flex flex-col items-center justify-center p-6 bg-rose-50 rounded-xl">
               <LogOutIcon className="w-8 h-8 text-rose-600 mb-2" />
               <p className="text-sm text-rose-600 mb-1">Check Out</p>
@@ -367,6 +405,100 @@ const Attendance = () => {
         </Card>
       </div>
 
+      {/* HR Manager - Leave Approvals */}
+      {user?.role === 'hr_manager' && (
+        <Card className="dashboard-card border-l-4 border-l-amber-500" data-testid="pending-approvals">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-slate-900 font-['Manrope'] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-600" />
+                Pending Leave Approvals
+              </div>
+              <span className="text-sm font-normal bg-amber-100 text-amber-700 px-3 py-1 rounded-full">
+                {pendingLeaves.length} pending
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pendingLeaves.length > 0 ? (
+              <div className="space-y-4">
+                {pendingLeaves.map((leave) => (
+                  <div 
+                    key={leave.id}
+                    className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-10 h-10">
+                          <AvatarFallback className="bg-blue-600 text-white">
+                            {leave.user?.full_name?.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-slate-900">{leave.user?.full_name}</p>
+                          <p className="text-sm text-slate-500 capitalize">{leave.user?.role}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 gap-1"
+                          onClick={() => handleApproveLeave(leave.id)}
+                          data-testid={`approve-leave-${leave.id}`}
+                        >
+                          <Check className="w-4 h-4" />
+                          Approve
+                        </Button>
+                        <Button 
+                          size="sm"
+                          variant="outline"
+                          className="text-rose-600 border-rose-200 hover:bg-rose-50 gap-1"
+                          onClick={() => {
+                            setSelectedLeave(leave);
+                            setRejectDialogOpen(true);
+                          }}
+                          data-testid={`reject-leave-${leave.id}`}
+                        >
+                          <X className="w-4 h-4" />
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-slate-500">Type:</span>
+                        <span className={`ml-2 badge ${
+                          leave.leave_type === 'sick' ? 'badge-error' :
+                          leave.leave_type === 'paid' ? 'badge-success' : 'badge-secondary'
+                        }`}>
+                          {leave.leave_type}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">From:</span>
+                        <span className="ml-2 font-medium text-slate-900">{leave.start_date}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">To:</span>
+                        <span className="ml-2 font-medium text-slate-900">{leave.end_date}</span>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded">
+                      <span className="font-medium">Reason:</span> {leave.reason}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-300 mb-3" />
+                <p className="text-slate-500">All leave requests have been processed</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Attendance History */}
         <Card className="dashboard-card" data-testid="attendance-history">
@@ -417,11 +549,11 @@ const Attendance = () => {
           </CardContent>
         </Card>
 
-        {/* Leave Requests */}
+        {/* My Leave Requests */}
         <Card className="dashboard-card" data-testid="leave-requests">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-slate-900 font-['Manrope']">
-              Leave Requests
+              My Leave Requests
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -452,6 +584,11 @@ const Attendance = () => {
                       </span>
                     </div>
                     <p className="text-sm text-slate-500">{leave.reason}</p>
+                    {leave.rejection_reason && (
+                      <p className="text-sm text-rose-600 mt-2 bg-rose-50 p-2 rounded">
+                        <span className="font-medium">Rejection reason:</span> {leave.rejection_reason}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -467,6 +604,39 @@ const Attendance = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Leave Request</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this leave request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Reason for Rejection</Label>
+              <Textarea
+                placeholder="Enter reason..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleRejectLeave}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              Reject Leave
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
