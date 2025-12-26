@@ -69,7 +69,7 @@ const EmployeeData = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 font-['Manrope']">
-            {t('employeeData')}
+            Personal Information
           </h2>
           <p className="text-slate-500 mt-1">
             View and manage your profile information
