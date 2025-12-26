@@ -497,6 +497,10 @@ class HRNexusAPITester:
             print("❌ API is not accessible. Stopping tests.")
             return False
 
+        # Test predefined users login first
+        print("\n🔐 Testing Predefined User Login...")
+        self.test_predefined_users_login()
+
         # Test user management
         print("\n📝 Testing User Management...")
         self.test_user_registration()
@@ -506,6 +510,25 @@ class HRNexusAPITester:
         if not self.token:
             print("❌ No valid authentication token. Cannot proceed with authenticated tests.")
             return False
+
+        # Test HR Nexus specific features (HIGH PRIORITY)
+        print("\n🎯 Testing HR Onboarding Management APIs...")
+        self.test_hr_onboarding_management_apis()
+        
+        print("\n👥 Testing Mentorship Assignment APIs...")
+        self.test_mentorship_assignment_apis()
+        
+        print("\n📄 Testing Document APIs...")
+        self.test_document_apis()
+        
+        print("\n🔒 Testing Role-Based Access Control...")
+        self.test_role_based_access_control()
+        
+        print("\n👨‍💼 Testing Employee Mentorship Access...")
+        self.test_employee_mentorship_access()
+        
+        print("\n👨‍🎓 Testing Intern Read-Only Onboarding...")
+        self.test_intern_read_only_onboarding()
 
         # Test core features
         print("\n⏰ Testing Attendance Management...")
