@@ -12,7 +12,6 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
-import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -26,6 +25,9 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', 'default_secret')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
+
+# Constants
+MAX_INTERNS_PER_EMPLOYEE = 15
 
 # Create the main app
 app = FastAPI(title="HR Nexus API")
@@ -47,7 +49,7 @@ class UserBase(BaseModel):
     date_of_birth: str
     address: str
     preferred_language: str = "english"
-    role: str  # intern, employee, hr_manager
+    role: str
     profile_picture: Optional[str] = None
 
 class InternFields(BaseModel):
@@ -108,7 +110,7 @@ class AttendanceRecord(BaseModel):
     date: str
     check_in: Optional[str] = None
     check_out: Optional[str] = None
-    status: str = "present"  # present, absent, leave
+    status: str = "present"
     notes: Optional[str] = None
 
 class LeaveRequest(BaseModel):
@@ -119,7 +121,10 @@ class LeaveRequest(BaseModel):
     end_date: str
     reason: str
     leave_type: str
-    status: str = "pending"  # pending, approved, rejected
+    status: str = "pending"
+    approved_by: Optional[str] = None
+    approved_at: Optional[str] = None
+    rejection_reason: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class Announcement(BaseModel):
@@ -128,9 +133,15 @@ class Announcement(BaseModel):
     title: str
     content: str
     category: str
+    author_name: str
+    author_role: str
+    cover_image: Optional[str] = None
+    tags: Optional[List[str]] = []
     created_by: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: Optional[str] = None
     is_active: bool = True
+    views: int = 0
 
 class PerformanceGoal(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -140,7 +151,7 @@ class PerformanceGoal(BaseModel):
     description: str
     target_date: str
     progress: int = 0
-    status: str = "in_progress"  # in_progress, completed, overdue
+    status: str = "in_progress"
     feedback: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -152,7 +163,7 @@ class TaskAssignment(BaseModel):
     description: str
     priority: str = "medium"
     due_date: str
-    status: str = "pending"  # pending, in_progress, completed
+    status: str = "pending"
     assigned_by: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -160,12 +171,19 @@ class PayrollRecord(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
+    user_name: Optional[str] = None
+    user_role: Optional[str] = None
     month: str
     year: str
-    amount: float
-    status: str = "pending"  # pending, paid
+    base_amount: float
+    bonus: float = 0
+    deductions: float = 0
+    net_amount: float = 0
+    status: str = "pending"
     payment_date: Optional[str] = None
     notes: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class OnboardingChecklist(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -205,6 +223,248 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# ==================== HELPER FUNCTIONS ====================
+
+async def assign_intern_to_employee_and_hr(intern_id: str):
+    """Auto-assign intern to an employee (max 15 interns per employee) and HR mentor"""
+    # Find an employee with less than 15 interns
+    employees = await db.users.find({"role": "employee"}, {"_id": 0}).to_list(1000)
+    
+    assigned_employee = None
+    for emp in employees:
+        # Count interns assigned to this employee
+        intern_count = await db.users.count_documents({
+            "role": "intern",
+            "assigned_employee_id": emp["id"]
+        })
+        if intern_count < MAX_INTERNS_PER_EMPLOYEE:
+            assigned_employee = emp
+            break
+    
+    # Find an HR manager to be mentor
+    hr_manager = await db.users.find_one({"role": "hr_manager"}, {"_id": 0})
+    
+    # Update the intern with assignments
+    update_data = {}
+    if assigned_employee:
+        update_data["assigned_employee_id"] = assigned_employee["id"]
+        update_data["assigned_employee_name"] = assigned_employee["full_name"]
+    if hr_manager:
+        update_data["assigned_hr_mentor_id"] = hr_manager["id"]
+        update_data["assigned_hr_mentor_name"] = hr_manager["full_name"]
+    
+    if update_data:
+        await db.users.update_one({"id": intern_id}, {"$set": update_data})
+
+async def create_sample_announcements():
+    """Create sample announcements if none exist"""
+    count = await db.announcements.count_documents({})
+    if count == 0:
+        sample_announcements = [
+            {
+                "id": str(uuid.uuid4()),
+                "title": "Welcome to HR Nexus - Your Digital HR Partner",
+                "content": """We are thrilled to announce the launch of HR Nexus, our comprehensive HR management platform designed to streamline all your human resource operations.
+
+**What's New:**
+- Seamless attendance tracking with one-click check-in/check-out
+- Digital leave management system
+- Performance tracking and goal setting
+- Payroll management for all employees
+
+**Getting Started:**
+1. Complete your profile with all required documents
+2. Set up your bank details for seamless payroll
+3. Explore the dashboard to familiarize yourself with features
+
+We're committed to making your HR experience smooth and efficient. Feel free to reach out to your HR mentor for any assistance.
+
+*Together, let's build a better workplace!*""",
+                "category": "general",
+                "author_name": "HR Team",
+                "author_role": "HR Manager",
+                "cover_image": "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800",
+                "tags": ["welcome", "announcement", "getting-started"],
+                "created_by": "system",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "is_active": True,
+                "views": 0
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "title": "Q4 2024 Company Performance & Growth Update",
+                "content": """Dear Team,
+
+We're excited to share our Q4 2024 performance highlights with you!
+
+**Revenue Growth:**
+- 35% increase in quarterly revenue compared to Q3
+- Successfully onboarded 50+ new clients
+- Expanded operations to 3 new cities
+
+**Team Achievements:**
+- Engineering team delivered 15 major features
+- Customer satisfaction score reached 94%
+- Employee retention rate at an all-time high of 96%
+
+**What's Next:**
+- Planning expansion into international markets
+- Launching new product lines in Q1 2025
+- Increasing team size by 40%
+
+**Recognition:**
+Special shoutout to our top performers this quarter! Your dedication and hard work have been instrumental in achieving these milestones.
+
+Keep up the amazing work, team!""",
+                "category": "important",
+                "author_name": "Leadership Team",
+                "author_role": "HR Manager",
+                "cover_image": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800",
+                "tags": ["company-update", "performance", "growth"],
+                "created_by": "system",
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(),
+                "is_active": True,
+                "views": 45
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "title": "New Learning & Development Opportunities",
+                "content": """Exciting news for all team members!
+
+We're launching new learning and development programs to help you grow in your career.
+
+**Available Programs:**
+
+🎓 **Technical Certifications**
+- AWS Cloud Practitioner (Company Sponsored)
+- Google Analytics Certification
+- Agile/Scrum Master Certification
+
+💼 **Leadership Development**
+- First-time Manager Training
+- Executive Communication Skills
+- Strategic Thinking Workshop
+
+🌟 **Soft Skills**
+- Public Speaking Masterclass
+- Time Management Bootcamp
+- Emotional Intelligence Training
+
+**How to Enroll:**
+1. Visit the Learning Portal in your dashboard
+2. Select your preferred program
+3. Get manager approval
+4. Start learning!
+
+**Deadline:** Applications open until December 31st, 2024
+
+Invest in yourself - your growth is our priority!""",
+                "category": "event",
+                "author_name": "Learning & Development",
+                "author_role": "HR Manager",
+                "cover_image": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800",
+                "tags": ["learning", "development", "training", "opportunities"],
+                "created_by": "system",
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat(),
+                "is_active": True,
+                "views": 128
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "title": "Annual Team Building Event - Save the Date!",
+                "content": """Mark your calendars! 🎉
+
+**HR Nexus Annual Team Building 2025**
+
+📅 **Date:** January 15-16, 2025
+📍 **Venue:** Riverside Resort & Spa
+⏰ **Time:** Full 2-day event
+
+**What to Expect:**
+
+**Day 1 - Adventure & Bonding**
+- Morning: Team building games & activities
+- Afternoon: Adventure sports (optional)
+- Evening: Cultural night & dinner
+
+**Day 2 - Recognition & Celebration**
+- Morning: Awards ceremony
+- Afternoon: Department showcases
+- Evening: Grand gala dinner & DJ night
+
+**Highlights:**
+- Best Team Awards
+- Star Performer Recognition
+- Fun games with exciting prizes
+- Professional photoshoot
+- Unlimited food & beverages
+
+**RSVP Required:** Please confirm your attendance by January 5th, 2025
+
+Transportation will be arranged from office. Families are welcome!
+
+Let's make memories together! 🌟""",
+                "category": "event",
+                "author_name": "Events Committee",
+                "author_role": "HR Manager",
+                "cover_image": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
+                "tags": ["team-building", "event", "celebration"],
+                "created_by": "system",
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),
+                "is_active": True,
+                "views": 256
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "title": "New Internship Opportunities - Refer & Earn",
+                "content": """We're expanding our internship program!
+
+**Open Positions:**
+
+💻 **Software Development Intern**
+- Duration: 6 months
+- Stipend: Competitive
+- Skills: React, Node.js, Python
+
+📊 **Data Analytics Intern**
+- Duration: 3-6 months
+- Stipend: Competitive
+- Skills: SQL, Python, Tableau
+
+🎨 **UI/UX Design Intern**
+- Duration: 4 months
+- Stipend: Competitive
+- Skills: Figma, Adobe XD
+
+📱 **Digital Marketing Intern**
+- Duration: 3 months
+- Stipend: Competitive
+- Skills: Social Media, SEO, Content
+
+**Referral Bonus:**
+Refer a candidate who gets selected and earn:
+- ₹5,000 for intern referrals
+- ₹15,000 for full-time employee referrals
+
+**How to Refer:**
+Send candidate details to hr@hrnexus.com with subject "Referral - [Position Name]"
+
+Help us build an amazing team!""",
+                "category": "important",
+                "author_name": "Talent Acquisition",
+                "author_role": "HR Manager",
+                "cover_image": "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800",
+                "tags": ["internship", "opportunities", "referral", "hiring"],
+                "created_by": "system",
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
+                "is_active": True,
+                "views": 189
+            }
+        ]
+        
+        await db.announcements.insert_many(sample_announcements)
+        logger.info("Sample announcements created")
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
@@ -218,6 +478,7 @@ async def register(user_data: UserCreate):
     user_dict["id"] = user_id
     user_dict["password"] = hash_password(user_data.password)
     user_dict["created_at"] = datetime.now(timezone.utc).isoformat()
+    user_dict["application_status"] = "selected"
     
     # Generate employee ID for employees
     if user_data.role == "employee" and user_data.employee_fields:
@@ -226,6 +487,10 @@ async def register(user_data: UserCreate):
             user_dict["employee_fields"]["employee_id"] = f"EMP{str(count + 1001).zfill(4)}"
     
     await db.users.insert_one(user_dict)
+    
+    # Auto-assign intern to employee and HR mentor
+    if user_data.role == "intern":
+        await assign_intern_to_employee_and_hr(user_id)
     
     # Create default onboarding checklist
     default_items = [
@@ -242,12 +507,15 @@ async def register(user_data: UserCreate):
     )
     await db.onboarding.insert_one(onboarding.model_dump())
     
+    # Create sample announcements if needed
+    await create_sample_announcements()
+    
     token = create_token(user_id, user_data.email, user_data.role)
     
-    # Get the created user from database without _id and password
-    created_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    # Fetch updated user with assignments
+    updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
     
-    return TokenResponse(access_token=token, user=created_user)
+    return TokenResponse(access_token=token, user=updated_user)
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: LoginRequest):
@@ -258,6 +526,9 @@ async def login(credentials: LoginRequest):
     token = create_token(user["id"], user["email"], user["role"])
     user_response = {k: v for k, v in user.items() if k != "password"}
     
+    # Create sample announcements if needed
+    await create_sample_announcements()
+    
     return TokenResponse(access_token=token, user=user_response)
 
 @api_router.get("/auth/me")
@@ -266,7 +537,6 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @api_router.put("/auth/profile")
 async def update_profile(updates: dict, current_user: dict = Depends(get_current_user)):
-    # Remove sensitive fields from updates
     updates.pop("password", None)
     updates.pop("id", None)
     updates.pop("email", None)
@@ -355,8 +625,18 @@ async def get_my_leaves(current_user: dict = Depends(get_current_user)):
 async def get_pending_leaves(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    leaves = await db.leaves.find({"status": "pending"}, {"_id": 0}).to_list(100)
+    leaves = await db.leaves.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(100)
     # Enrich with user data
+    for leave in leaves:
+        user = await db.users.find_one({"id": leave["user_id"]}, {"_id": 0, "password": 0})
+        leave["user"] = user
+    return leaves
+
+@api_router.get("/leave/all")
+async def get_all_leaves(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    leaves = await db.leaves.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     for leave in leaves:
         user = await db.users.find_one({"id": leave["user_id"]}, {"_id": 0, "password": 0})
         leave["user"] = user
@@ -366,16 +646,31 @@ async def get_pending_leaves(current_user: dict = Depends(get_current_user)):
 async def approve_leave(leave_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    result = await db.leaves.update_one({"id": leave_id}, {"$set": {"status": "approved"}})
+    result = await db.leaves.update_one(
+        {"id": leave_id}, 
+        {"$set": {
+            "status": "approved",
+            "approved_by": current_user["id"],
+            "approved_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Leave request not found")
-    return {"message": "Leave approved"}
+    return {"message": "Leave approved successfully"}
 
 @api_router.put("/leave/{leave_id}/reject")
-async def reject_leave(leave_id: str, current_user: dict = Depends(get_current_user)):
+async def reject_leave(leave_id: str, data: dict = None, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
-    result = await db.leaves.update_one({"id": leave_id}, {"$set": {"status": "rejected"}})
+    update_data = {
+        "status": "rejected",
+        "approved_by": current_user["id"],
+        "approved_at": datetime.now(timezone.utc).isoformat()
+    }
+    if data and data.get("reason"):
+        update_data["rejection_reason"] = data["reason"]
+    
+    result = await db.leaves.update_one({"id": leave_id}, {"$set": update_data})
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Leave request not found")
     return {"message": "Leave rejected"}
@@ -391,6 +686,10 @@ async def create_announcement(data: dict, current_user: dict = Depends(get_curre
         title=data["title"],
         content=data["content"],
         category=data.get("category", "general"),
+        author_name=current_user["full_name"],
+        author_role=current_user["role"],
+        cover_image=data.get("cover_image"),
+        tags=data.get("tags", []),
         created_by=current_user["id"]
     )
     await db.announcements.insert_one(announcement.model_dump())
@@ -402,6 +701,33 @@ async def get_announcements(current_user: dict = Depends(get_current_user)):
         {"is_active": True}, {"_id": 0}
     ).sort("created_at", -1).to_list(50)
     return announcements
+
+@api_router.get("/announcements/{announcement_id}")
+async def get_announcement(announcement_id: str, current_user: dict = Depends(get_current_user)):
+    announcement = await db.announcements.find_one({"id": announcement_id}, {"_id": 0})
+    if not announcement:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    # Increment views
+    await db.announcements.update_one({"id": announcement_id}, {"$inc": {"views": 1}})
+    return announcement
+
+@api_router.put("/announcements/{announcement_id}")
+async def update_announcement(announcement_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    update_data = {
+        "title": data.get("title"),
+        "content": data.get("content"),
+        "category": data.get("category"),
+        "cover_image": data.get("cover_image"),
+        "tags": data.get("tags"),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    update_data = {k: v for k, v in update_data.items() if v is not None}
+    
+    await db.announcements.update_one({"id": announcement_id}, {"$set": update_data})
+    return {"message": "Announcement updated"}
 
 @api_router.delete("/announcements/{announcement_id}")
 async def delete_announcement(announcement_id: str, current_user: dict = Depends(get_current_user)):
@@ -472,20 +798,69 @@ async def get_my_payroll(current_user: dict = Depends(get_current_user)):
     records = await db.payroll.find({"user_id": current_user["id"]}, {"_id": 0}).sort([("year", -1), ("month", -1)]).to_list(24)
     return records
 
+@api_router.get("/payroll/all")
+async def get_all_payroll(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    records = await db.payroll.find({}, {"_id": 0}).sort([("year", -1), ("month", -1)]).to_list(500)
+    return records
+
 @api_router.post("/payroll")
 async def create_payroll(data: dict, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "hr_manager":
         raise HTTPException(status_code=403, detail="HR Manager access required")
     
+    # Get user info
+    user = await db.users.find_one({"id": data["user_id"]}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    base_amount = float(data.get("base_amount", 0))
+    bonus = float(data.get("bonus", 0))
+    deductions = float(data.get("deductions", 0))
+    net_amount = base_amount + bonus - deductions
+    
     record = PayrollRecord(
         user_id=data["user_id"],
+        user_name=user["full_name"],
+        user_role=user["role"],
         month=data["month"],
         year=data["year"],
-        amount=data["amount"],
-        notes=data.get("notes")
+        base_amount=base_amount,
+        bonus=bonus,
+        deductions=deductions,
+        net_amount=net_amount,
+        notes=data.get("notes"),
+        created_by=current_user["id"]
     )
     await db.payroll.insert_one(record.model_dump())
     return {"message": "Payroll record created", "id": record.id}
+
+@api_router.put("/payroll/{record_id}")
+async def update_payroll(record_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    
+    update_data = {}
+    if "base_amount" in data:
+        update_data["base_amount"] = float(data["base_amount"])
+    if "bonus" in data:
+        update_data["bonus"] = float(data["bonus"])
+    if "deductions" in data:
+        update_data["deductions"] = float(data["deductions"])
+    if "notes" in data:
+        update_data["notes"] = data["notes"]
+    
+    # Recalculate net amount
+    record = await db.payroll.find_one({"id": record_id}, {"_id": 0})
+    if record:
+        base = update_data.get("base_amount", record.get("base_amount", 0))
+        bonus = update_data.get("bonus", record.get("bonus", 0))
+        deductions = update_data.get("deductions", record.get("deductions", 0))
+        update_data["net_amount"] = base + bonus - deductions
+    
+    await db.payroll.update_one({"id": record_id}, {"$set": update_data})
+    return {"message": "Payroll record updated"}
 
 @api_router.put("/payroll/{record_id}/pay")
 async def mark_paid(record_id: str, current_user: dict = Depends(get_current_user)):
@@ -535,6 +910,27 @@ async def get_all_users(current_user: dict = Depends(get_current_user)):
     users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(1000)
     return users
 
+@api_router.get("/users/interns")
+async def get_interns(current_user: dict = Depends(get_current_user)):
+    """Get all interns - for employee and HR manager"""
+    if current_user["role"] == "intern":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {"role": "intern"}
+    if current_user["role"] == "employee":
+        # Employee sees only their assigned interns
+        query["assigned_employee_id"] = current_user["id"]
+    
+    interns = await db.users.find(query, {"_id": 0, "password": 0}).to_list(100)
+    return interns
+
+@api_router.get("/users/employees")
+async def get_employees(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "hr_manager":
+        raise HTTPException(status_code=403, detail="HR Manager access required")
+    employees = await db.users.find({"role": "employee"}, {"_id": 0, "password": 0}).to_list(100)
+    return employees
+
 @api_router.get("/users/{user_id}")
 async def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
@@ -549,6 +945,57 @@ async def update_user_status(user_id: str, data: dict, current_user: dict = Depe
     await db.users.update_one({"id": user_id}, {"$set": {"application_status": data.get("status")}})
     return {"message": "Status updated"}
 
+# ==================== TEAM HIERARCHY ====================
+
+@api_router.get("/team/my-team")
+async def get_my_team(current_user: dict = Depends(get_current_user)):
+    """Get team members based on role"""
+    if current_user["role"] == "intern":
+        # Intern sees their assigned employee and HR mentor
+        result = {
+            "assigned_employee": None,
+            "hr_mentor": None
+        }
+        if current_user.get("assigned_employee_id"):
+            emp = await db.users.find_one({"id": current_user["assigned_employee_id"]}, {"_id": 0, "password": 0})
+            result["assigned_employee"] = emp
+        if current_user.get("assigned_hr_mentor_id"):
+            hr = await db.users.find_one({"id": current_user["assigned_hr_mentor_id"]}, {"_id": 0, "password": 0})
+            result["hr_mentor"] = hr
+        return result
+    
+    elif current_user["role"] == "employee":
+        # Employee sees their interns
+        interns = await db.users.find(
+            {"role": "intern", "assigned_employee_id": current_user["id"]}, 
+            {"_id": 0, "password": 0}
+        ).to_list(20)
+        return {"interns": interns, "intern_count": len(interns)}
+    
+    elif current_user["role"] == "hr_manager":
+        # HR sees all team members under mentorship
+        mentees = await db.users.find(
+            {"assigned_hr_mentor_id": current_user["id"]}, 
+            {"_id": 0, "password": 0}
+        ).to_list(100)
+        
+        # Get employees with their intern counts
+        employees = await db.users.find({"role": "employee"}, {"_id": 0, "password": 0}).to_list(100)
+        for emp in employees:
+            emp["intern_count"] = await db.users.count_documents({
+                "role": "intern",
+                "assigned_employee_id": emp["id"]
+            })
+        
+        return {
+            "mentees": mentees,
+            "mentee_count": len(mentees),
+            "employees": employees,
+            "employee_count": len(employees)
+        }
+    
+    return {}
+
 # ==================== DASHBOARD STATS ====================
 
 @api_router.get("/dashboard/stats")
@@ -556,25 +1003,14 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
-    # Get attendance stats
     total_attendance = await db.attendance.count_documents({"user_id": user_id})
     present_days = await db.attendance.count_documents({"user_id": user_id, "status": "present"})
-    
-    # Get pending tasks
     pending_tasks = await db.tasks.count_documents({"user_id": user_id, "status": {"$ne": "completed"}})
-    
-    # Get leaves
     approved_leaves = await db.leaves.count_documents({"user_id": user_id, "status": "approved"})
     pending_leaves = await db.leaves.count_documents({"user_id": user_id, "status": "pending"})
-    
-    # Get goals
     total_goals = await db.goals.count_documents({"user_id": user_id})
     completed_goals = await db.goals.count_documents({"user_id": user_id, "status": "completed"})
-    
-    # Get today's attendance
     today_attendance = await db.attendance.find_one({"user_id": user_id, "date": today}, {"_id": 0})
-    
-    # Get announcements count
     announcements_count = await db.announcements.count_documents({"is_active": True})
     
     return {
@@ -583,13 +1019,8 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
             "present": present_days,
             "attendance_rate": round((present_days / total_attendance * 100) if total_attendance > 0 else 0, 1)
         },
-        "tasks": {
-            "pending": pending_tasks
-        },
-        "leaves": {
-            "approved": approved_leaves,
-            "pending": pending_leaves
-        },
+        "tasks": {"pending": pending_tasks},
+        "leaves": {"approved": approved_leaves, "pending": pending_leaves},
         "goals": {
             "total": total_goals,
             "completed": completed_goals,
@@ -610,6 +1041,7 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
     pending_leaves = await db.leaves.count_documents({"status": "pending"})
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     present_today = await db.attendance.count_documents({"date": today, "check_in": {"$ne": None}})
+    pending_payroll = await db.payroll.count_documents({"status": "pending"})
     
     return {
         "total_employees": total_employees,
@@ -617,7 +1049,8 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
         "total_hr": total_hr,
         "pending_leaves": pending_leaves,
         "present_today": present_today,
-        "total_staff": total_employees + total_interns + total_hr
+        "total_staff": total_employees + total_interns + total_hr,
+        "pending_payroll": pending_payroll
     }
 
 # Root endpoint
