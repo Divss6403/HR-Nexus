@@ -33,7 +33,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     },
     { 
       icon: UserCircle, 
-      label: t('employeeData'), 
+      label: 'Personal Information', 
       path: '/dashboard/employee-data',
       roles: ['intern', 'employee', 'hr_manager']
     },
