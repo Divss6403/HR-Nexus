@@ -15,6 +15,7 @@ import Payroll from "./pages/Dashboard/Payroll";
 import Performance from "./pages/Dashboard/Performance";
 import Attendance from "./pages/Dashboard/Attendance";
 import Announcements from "./pages/Dashboard/Announcements";
+import Mentorship from "./pages/Dashboard/Mentorship";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
               <Route path="performance" element={<Performance />} />
               <Route path="attendance" element={<Attendance />} />
               <Route path="announcements" element={<Announcements />} />
+              <Route path="mentorship" element={<Mentorship />} />
             </Route>
             
             {/* Default redirect */}
