@@ -176,7 +176,7 @@ code {
   animation: slideInLeft 0.3s ease forwards;
 }
 
-/* Pulse animation for notifications */
+/* Animation for notifications */
 @keyframes pulse-ring {
   0% {
     transform: scale(0.8);
@@ -224,7 +224,7 @@ input:focus, textarea:focus, select:focus {
   @apply bg-blue-900/20 text-blue-400 border-l-4 border-blue-500;
 }
 
-/* Glass effect for header */
+
 .glass-header {
   backdrop-filter: blur(12px);
   background-color: rgba(255, 255, 255, 0.8);
@@ -236,7 +236,6 @@ input:focus, textarea:focus, select:focus {
   }
 }
 
-/* Background Animations */
 .bg-grid-pattern {
   background-image: 
     linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),

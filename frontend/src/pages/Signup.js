@@ -317,7 +317,7 @@ const Signup = () => {
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     type="text"
-                    placeholder="John Doe"
+                    placeholder="Your name"
                     className={`pl-10 ${errors.full_name ? 'border-rose-300' : ''}`}
                     value={formData.full_name}
                     onChange={(e) => handleChange('full_name', e.target.value)}
@@ -341,7 +341,7 @@ const Signup = () => {
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     type="email"
-                    placeholder="name@company.com"
+                    placeholder="Your email"
                     className={`pl-10 ${errors.email ? 'border-rose-300' : ''}`}
                     value={formData.email}
                     onChange={(e) => handleChange('email', e.target.value)}
@@ -420,7 +420,7 @@ const Signup = () => {
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
                     type="text"
-                    placeholder="+91 9876543210"
+                    placeholder="+91 XXXXXYYYYY"
                     className={`pl-10 ${errors.phone ? 'border-rose-300' : ''}`}
                     value={formData.phone}
                     onChange={(e) => handleChange('phone', e.target.value)}
@@ -445,9 +445,9 @@ const Signup = () => {
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="male">{t('male')}</SelectItem>
-                    <SelectItem value="female">{t('female')}</SelectItem>
-                    <SelectItem value="other">{t('other')}</SelectItem>
+                    <SelectItem value="male">{t('Male')}</SelectItem>
+                    <SelectItem value="female">{t('Female')}</SelectItem>
+                    <SelectItem value="other">{t('Other')}</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.gender && (
