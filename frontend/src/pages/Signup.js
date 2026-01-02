@@ -981,12 +981,12 @@ const Signup = () => {
                 <div key={i} className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-900" />
               ))}
             </div>
-            <span className="text-slate-300">500+ companies trust us</span>
+            <span className="text-slate-300">Not just a platform, but a partner</span>
           </div>
         </div>
         
         <div className="relative z-20 flex items-center gap-4 text-sm text-slate-400">
-          <span>© 2024 HR Nexus</span>
+          <span>© 2026 HR Nexus</span>
           <span>•</span>
           <span>All rights reserved</span>
         </div>

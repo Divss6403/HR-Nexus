@@ -632,7 +632,7 @@ const UserOnboardingView = () => {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Phone className="w-4 h-4 text-slate-400" />
-                  <span>+91 98765 43210</span>
+                  <span>+91 70077 55346</span>
                 </div>
               </div>
             </CardContent>

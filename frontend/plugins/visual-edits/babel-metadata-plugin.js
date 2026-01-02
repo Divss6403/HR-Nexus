@@ -983,9 +983,11 @@ const babelMetadataPlugin = ({ types: t }) => {
           fileNameCache.set(filename, base);
         }
         const normalizedPath = fileNameCache.get(filename) || "unknown";
+        
+        const parentPath = jsxPath.parentPath;
+        const isInArrayMethod = parentPath ? isJSXDynamic(parentPath) : false;
+        const hasExpressions = parentPath && parentPath.node? hasAnyExpression(parentPath.node) : false;
 
-        const isInArrayMethod = parentElement ? isJSXDynamic(parentElement) : false;
-        const hasExpressions = parentElement && parentElement.node ? hasAnyExpression(parentElement.node) : false;
         const isDynamic = isInArrayMethod || hasExpressions;
 
         insertMetaAttributes(jsxPath.node, [

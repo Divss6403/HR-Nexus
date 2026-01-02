@@ -68,7 +68,7 @@ const Login = () => {
         </div>
         
         <div className="relative z-20 flex items-center gap-4 text-sm text-slate-400">
-          <span>© 2024 HR Nexus</span>
+          <span>© 2026 HR Nexus</span>
           <span>•</span>
           <span>All rights reserved</span>
         </div>
@@ -119,7 +119,7 @@ const Login = () => {
                     <Input
                       id="email"
                       type="email"
-                      placeholder="name@company.com"
+                      placeholder="Your registered email"
                       className="pl-10"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
