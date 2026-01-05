@@ -19,9 +19,28 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+MONGO_URL = os.getenv("MONGO_URL")
+DB_NAME = os.getenv("DB_NAME")
+
+client: AsyncIOMotorClient | None = None
+db = None
+
+
+async def connect_to_mongo():
+    global client, db
+    client = AsyncIOMotorClient(
+        MONGO_URL,
+        serverSelectionTimeoutMS=20000
+    )
+    db = client[DB_NAME]
+    await client.admin.command("ping")
+    print("✅ MongoDB connected")
+
+
+async def close_mongo():
+    if client:
+        client.close()
+        print("🛑 MongoDB disconnected")
 
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'default_secret')
@@ -35,6 +54,22 @@ MAX_INTERNS_PER_EMPLOYEE = 15
 app = FastAPI(title="HR Nexus API")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
+
+@app.on_event("startup")
+async def startup_event():
+    await connect_to_mongo()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_mongo_connection()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -1224,17 +1259,9 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
 async def root():
     return {"message": "HR Nexus API v1.0", "status": "running"}
 
-# Include the router
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+# Include the router
+app.include_router(api_router)
