@@ -4,6 +4,7 @@
 .idea/
 .vscode/
 
+<<<<<<< HEAD
 venv/
 __pycache__/
 .env
@@ -11,6 +12,8 @@ node_modules/
 dist/
 build/
 
+=======
+>>>>>>> 520325cf15d940ba3542f76fae53029362ef8328
 # Dependencies
 node_modules/
 /node_modules
