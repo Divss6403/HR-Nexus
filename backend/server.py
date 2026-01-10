@@ -1,5 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, status
 from fastapi.responses import StreamingResponse
+from fastapi import Request
+from fastapi.responses import Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -56,7 +58,16 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://hr-nexus-app.onrender.com","http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+@app.options("/{full_path:path}")
+async def preflight_handler(request: Request, full_path: str):
+    return Response(status_code=200)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -66,15 +77,10 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await close_mongo_connection()
+    await close_mongo()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://hr-nexus-app.onrender.com","http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Include the router
+app.include_router(api_router)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -1268,5 +1274,3 @@ async def root():
 async def shutdown_db_client():
     client.close()
 
-# Include the router
-app.include_router(api_router)
