@@ -51,15 +51,12 @@ JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
 MAX_INTERNS_PER_EMPLOYEE = 15
 
 # Create the main app
-<<<<<<< HEAD
 app = FastAPI(
     title="HR Nexus API",
     docs_url="/docs",
     redoc_url="/redoc"
 )
-=======
-app = FastAPI(title="HR Nexus API")
->>>>>>> 520325cf15d940ba3542f76fae53029362ef8328
+
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
