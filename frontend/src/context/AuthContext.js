@@ -95,10 +95,5 @@ export const useAuth = () => {
   }
   return context;
 };
-const login = async (email, password) => {
-  console.log("LOGIN REQUEST:", email, password);
-  const response = await axios.post(`${API_URL}/auth/login`, { email, password });
-  console.log("LOGIN RESPONSE:", response.data);
-};
 
 export default AuthContext;
