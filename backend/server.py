@@ -51,7 +51,11 @@ JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS', '24'))
 MAX_INTERNS_PER_EMPLOYEE = 15
 
 # Create the main app
-app = FastAPI(title="HR Nexus API")
+app = FastAPI(
+    title="HR Nexus API",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -1262,6 +1266,10 @@ async def root():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+@app.get("/")
+async def app_root():
+    return {"message": "HR Nexus Backend is live"}
 
 # Include the router
 app.include_router(api_router)

@@ -4,6 +4,13 @@
 .idea/
 .vscode/
 
+venv/
+__pycache__/
+.env
+node_modules/
+dist/
+build/
+
 # Dependencies
 node_modules/
 /node_modules
