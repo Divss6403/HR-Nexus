@@ -69,6 +69,28 @@ api_router = APIRouter(prefix="/api")
 async def login():
     return {"msg": "login works"}
 
+@api_router.get("/auth/me")
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("user_id")
+
+        user = await db.users.find_one({"_id": user_id})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        user["_id"] = str(user["_id"])
+        user.pop("password", None)
+
+        return user
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 # Include the router
 app.include_router(api_router)
