@@ -13,7 +13,6 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
-from bson import ObjectId
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -86,7 +85,7 @@ async def login(data: LoginRequest):
 
     payload = {
         "user_id": str(user["_id"]),
-        "exp": int(datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS).timestamp())
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
     }
 
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -100,18 +99,11 @@ async def login(data: LoginRequest):
         "user": user
     }
 
-security = HTTPBearer()
 
 @api_router.get("/auth/me")
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
 ):
-    if credentials is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    if db is None:
-        raise HTTPException(status_code=503, detail="Database not ready")
-
     try:
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -133,6 +125,8 @@ async def get_current_user(
 
 # Include the router
 app.include_router(api_router)
+
+security = HTTPBearer()
 
 @app.on_event("startup")
 async def startup_event():
