@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
-      logout();
+      setLoading(false);
     } finally {
       setLoading(false);
     }
