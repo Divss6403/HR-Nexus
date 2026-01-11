@@ -13,6 +13,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
+from bson import ObjectId
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -109,7 +110,7 @@ async def get_current_user(
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("user_id")
 
-        user = await db.users.find_one({"_id": user_id})
+        user = await db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
