@@ -86,7 +86,7 @@ async def login(data: LoginRequest):
 
     payload = {
         "user_id": str(user["_id"]),
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+        "exp": int(datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS).timestamp())
     }
 
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -100,11 +100,18 @@ async def login(data: LoginRequest):
         "user": user
     }
 
+security = HTTPBearer()
 
 @api_router.get("/auth/me")
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
 ):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not ready")
+
     try:
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -126,8 +133,6 @@ async def get_current_user(
 
 # Include the router
 app.include_router(api_router)
-
-security = HTTPBearer()
 
 @app.on_event("startup")
 async def startup_event():
