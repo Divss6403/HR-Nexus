@@ -13,6 +13,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
+from bson import ObjectId
 import bcrypt
 
 ROOT_DIR = Path(__file__).parent
@@ -66,55 +67,29 @@ app.add_middleware(
 
 api_router = APIRouter(prefix="/api")
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+security = HTTPBearer()
 
-
-@api_router.post("/auth/login")
-async def login(data: LoginRequest):
-    user = await db.users.find_one({"email": data.email})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    if not bcrypt.checkpw(
-        data.password.encode("utf-8"),
-        user["password"].encode("utf-8")
-    ):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    payload = {
-        "user_id": str(user["_id"]),
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
-    }
-
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-    user["_id"] = str(user["_id"])
-    user.pop("password", None)
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": user
-    }
-
-
-@api_router.get("/auth/me")
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     try:
-        token = credentials.credentials
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("user_id")
+        payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM]
+        )
 
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user_id = payload.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user = await db.users.find_one(
+            {"id": user_id},
+            {"_id": 0, "password": 0}
+        )
+
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-
-        user["_id"] = str(user["_id"])
-        user.pop("password", None)
 
         return user
 
@@ -123,10 +98,13 @@ async def get_current_user(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+@api_router.get("/auth/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return current_user
+
 # Include the router
 app.include_router(api_router)
 
-security = HTTPBearer()
 
 @app.on_event("startup")
 async def startup_event():
