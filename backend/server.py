@@ -65,9 +65,40 @@ app.add_middleware(
 )
 
 api_router = APIRouter(prefix="/api")
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 @api_router.post("/auth/login")
-async def login():
-    return {"msg": "login works"}
+async def login(data: LoginRequest):
+    user = await db.users.find_one({"email": data.email})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not bcrypt.checkpw(
+        data.password.encode("utf-8"),
+        user["password"].encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    payload = {
+        "user_id": str(user["_id"]),
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+    }
+
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+    user["_id"] = str(user["_id"])
+    user.pop("password", None)
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": user
+    }
+
 
 @api_router.get("/auth/me")
 async def get_current_user(
