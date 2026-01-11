@@ -65,10 +65,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.options("/{full_path:path}")
-async def preflight_handler(request: Request, full_path: str):
-    return Response(status_code=200)
+
 api_router = APIRouter(prefix="/api")
+@api_router.post("/auth/login")
+async def login():
+    return {"msg": "login works"}
+
+
+# Include the router
+app.include_router(api_router)
+
 security = HTTPBearer()
 
 @app.on_event("startup")
@@ -79,8 +85,6 @@ async def startup_event():
 async def shutdown_event():
     await close_mongo()
 
-# Include the router
-app.include_router(api_router)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
