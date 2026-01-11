@@ -97,19 +97,6 @@ async def get_current_user(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Include the router
-app.include_router(api_router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    await connect_to_mongo()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await close_mongo()
-
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -1288,7 +1275,13 @@ async def get_hr_stats(current_user: dict = Depends(get_current_user)):
 async def root():
     return {"message": "HR Nexus API v1.0", "status": "running"}
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# Include the router
+app.include_router(api_router)
 
+@app.on_event("startup")
+async def startup_event():
+    await connect_to_mongo()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_mongo()
